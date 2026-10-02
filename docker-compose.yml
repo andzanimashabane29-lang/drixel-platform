@@ -18,5 +18,42 @@ services:
       timeout: 3s
       retries: 15
 
+  directory_init:
+    image: postgres:17-alpine
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-drixel_platform}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_USER: ${POSTGRES_USER:-drixel_admin}
+      POSTGRES_DB: ${POSTGRES_DB:-drixel_platform}
+      POSTGRES_DIRECTORY_PASSWORD: ${POSTGRES_DIRECTORY_PASSWORD:?Set POSTGRES_DIRECTORY_PASSWORD in .env}
+    volumes:
+      - ./db/migrations/002_directory_reader.sql:/opt/drixel/002_directory_reader.sql:ro
+      - ./db/init/03_directory_reader_login.sh:/opt/drixel/03_directory_reader_login.sh:ro
+    entrypoint: ["/bin/sh", "/opt/drixel/03_directory_reader_login.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      API_PORT: 3000
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-drixel_platform}
+      PGUSER: drixel_directory_reader
+      PGPASSWORD: ${POSTGRES_DIRECTORY_PASSWORD:?Set POSTGRES_DIRECTORY_PASSWORD in .env}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      directory_init:
+        condition: service_completed_successfully
+
 volumes:
   drixel_postgres:
