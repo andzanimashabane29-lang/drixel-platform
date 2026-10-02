@@ -1,6 +1,6 @@
 # Drixel Platform foundation
 
-This repository starts the shared organization and account directory for Drixel Labs Inc. It provides a PostgreSQL foundation for the group, business units, services, global accounts, scoped memberships, role assignments, consent records, and audit events.
+This repository starts the shared organization and account directory for Drixel Labs Inc. It provides a PostgreSQL foundation for the group, business units, services, global accounts, scoped memberships, role assignments, consent records, and audit events. The admin console now reads the business and service register from PostgreSQL through a small read-only API.
 
 ## Initial portfolio
 
@@ -15,19 +15,31 @@ These are modeled as operating units and services. The database does not assert 
 
 ## Start the local database
 
-1. Copy `.env.example` to `.env` and set a local password.
-2. From this folder, run `docker compose up -d`.
-3. The first database start runs `db/migrations/001_initial.sql` and `db/seed/001_portfolio.sql` automatically.
+1. Copy `.env.example` to `.env` and set separate local passwords for PostgreSQL administration and the directory reader.
+2. From this folder, run `docker compose up --build -d`.
+3. On a new database volume, PostgreSQL runs `db/migrations/001_initial.sql` and `db/seed/001_portfolio.sql`. The `directory_init` service applies the repeatable read-role policy and password setup, including when an existing database volume is reused.
+4. The API is available on port 3000. `GET /api/health` checks database connectivity; `GET /api/portfolio` returns business and service records only.
 
-The compose setup requires Docker Desktop or Docker Engine with the Compose plugin. The password in `.env` is for local development only.
+The compose setup requires Docker Desktop or Docker Engine with the Compose plugin. Both passwords in `.env` are for local development only. Do not use these credentials for a shared or production deployment.
 
 ## Start the admin console
 
 1. Install Node.js 20.19+ or 22.12+.
 2. Run `npm install`.
-3. Run `npm run dev` and open the local URL printed by Vite.
+3. Start the API and database with `docker compose up --build -d`.
+4. Run `npm run dev` and open the local URL printed by Vite. Vite forwards `/api` requests to the API on port 3000.
 
-The console uses a restrained white, charcoal, and gray interface. It contains overview, business, service, account, access-role, audit, and settings pages, with no gradients or decorative artwork. The business and service pages currently show the same initial portfolio listed in the SQL seed. Account, audit, and configuration actions stay unavailable until the OIDC identity provider and management API are connected; the interface does not invent account data.
+The console uses a restrained white, charcoal, and gray interface. It contains overview, business, service, account, access-role, audit, and settings pages, with no gradients or decorative artwork. Business and service pages use live directory responses; when the API is unavailable, the interface reports that state rather than showing hard-coded records. Account, audit, and configuration actions stay unavailable until Drixel ID and an authenticated management API are connected; the interface does not invent account data.
+
+## API and database security
+
+- The portfolio API uses the dedicated `drixel_directory_reader` PostgreSQL role. It can only select group, business-unit, subsidiary, and their service records.
+- Row-level security hides customer organizations and their applications from this API role. Account, membership, role-assignment, consent, and audit tables are not granted to it.
+- The API accepts `GET` requests only. It does not create or change directory or account records.
+- Set both passwords in `.env`; the API receives only the directory-reader password. Never put credentials in frontend code.
+- The console must be served behind the same-origin `/api` route in a deployment. The Vite proxy in this repository is for local development only.
+
+Run `npm run test:api` for API route and failure-mode tests, and `npm run build` for the frontend TypeScript and production build.
 
 ## Account and data model
 
@@ -40,7 +52,7 @@ The console uses a restrained white, charcoal, and gray interface. It contains o
 - `application_memberships` records access to a service; `role_assignments` scopes permissions to the group, a business, a service, or customer workspace.
 - `consents` and `audit_events` capture user choices and high-value administrative actions.
 
-The migration enables PostgreSQL row-level security on account and organization tables with no public policies. Application services must authenticate through an identity provider, check scoped membership and roles, and use a restricted database role. Do not connect end-user clients directly to the database or use the migration owner as the runtime account.
+The migration enables PostgreSQL row-level security on the account and organization tables. A dedicated reader policy exposes only group and business portfolio records to the read-only directory API; account and customer-workspace data remain unavailable to that role. Application services must authenticate through an identity provider, check scoped membership and roles, and use restricted database roles. Do not connect end-user clients directly to the database or use the migration owner as the runtime account.
 
 ## Next implementation step
 
