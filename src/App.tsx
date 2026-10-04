@@ -1,41 +1,142 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 
 type Section = 'Overview' | 'Businesses' | 'Services' | 'Accounts' | 'Access roles' | 'Audit log' | 'Settings'
 
-const businesses = [
-  { name: 'Drixel SA', category: 'Fashion and ecommerce', services: 'Drixel SA Store', status: 'Registered' },
-  { name: 'Excel Tutoring Academy SA', category: 'Online education', services: 'Learning Platform', status: 'Registered' },
-  { name: 'DrixelOne', category: 'Technology', services: 'No services registered', status: 'Registered' },
-  { name: 'Drixel Digital Products', category: 'Digital products', services: 'A-Chatz, SkrpTure', status: 'Registered' },
-]
+type Business = { id: string; slug: string; name: string; kind: string; status: string }
+type Service = { id: string; slug: string; name: string; status: string; owner_slug: string; owner_name: string }
+type Portfolio = { businesses: Business[]; services: Service[] }
+type BusinessRow = Business & { category: string; services: string }
+type AppRoute = { section: Section; slug?: string }
 
-const services = [
-  { name: 'Drixel ID', owner: 'Drixel Labs Inc', type: 'Identity service' },
-  { name: 'Drixel SA Store', owner: 'Drixel SA', type: 'Commerce' },
-  { name: 'Excel Tutoring Academy Learning Platform', owner: 'Excel Tutoring Academy SA', type: 'Education' },
-  { name: 'A-Chatz', owner: 'Drixel Digital Products', type: 'Messaging' },
-  { name: 'SkrpTure', owner: 'Drixel Digital Products', type: 'Church presentation' },
-]
+const emptyPortfolio: Portfolio = { businesses: [], services: [] }
+
+const statusLabel = (status: string) => status.charAt(0).toUpperCase() + status.slice(1)
 
 const sections: Section[] = ['Overview', 'Businesses', 'Services', 'Accounts', 'Access roles', 'Audit log', 'Settings']
+const sectionPaths: Record<Section, string> = {
+  Overview: '/overview',
+  Businesses: '/businesses',
+  Services: '/services',
+  Accounts: '/accounts',
+  'Access roles': '/access-roles',
+  'Audit log': '/audit-log',
+  Settings: '/settings',
+}
+
+function routeFromPath(pathname: string): AppRoute {
+  const section = sections.find((candidate) => sectionPaths[candidate] === pathname)
+  if (section) return { section }
+
+  const recordMatch = pathname.match(/^\/(businesses|services)\/([a-z0-9]+(?:-[a-z0-9]+)*)$/)
+  if (recordMatch) return { section: recordMatch[1] === 'businesses' ? 'Businesses' : 'Services', slug: recordMatch[2] }
+  return { section: 'Overview' }
+}
+
+function followSectionLink(event: ReactMouseEvent<HTMLAnchorElement>, navigate: () => void) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  navigate()
+}
 
 function App() {
-  const [section, setSection] = useState<Section>('Overview')
+  const [route, setRoute] = useState<AppRoute>(() => routeFromPath(window.location.pathname))
+  const section = route.section
   const [query, setQuery] = useState('')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [portfolio, setPortfolio] = useState<Portfolio>(emptyPortfolio)
+  const [directoryLoading, setDirectoryLoading] = useState(true)
+  const [directoryError, setDirectoryError] = useState(false)
+  const [directoryRefresh, setDirectoryRefresh] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setDirectoryLoading(true)
+    fetch('/api/portfolio', { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('Portfolio unavailable')
+        return response.json() as Promise<Portfolio>
+      })
+      .then((data) => {
+        setPortfolio({
+          businesses: data.businesses ?? [],
+          services: data.services ?? [],
+        })
+        setDirectoryError(false)
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setPortfolio(emptyPortfolio)
+        setDirectoryError(true)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDirectoryLoading(false)
+      })
+    return () => controller.abort()
+  }, [directoryRefresh])
+
+  useEffect(() => {
+    const initialRoute = routeFromPath(window.location.pathname)
+    const knownPath = sections.some((knownSection) => sectionPaths[knownSection] === window.location.pathname)
+      || Boolean(initialRoute.slug)
+    if (!knownPath) window.history.replaceState(null, '', sectionPaths.Overview)
+    const handlePopState = () => {
+      setRoute(routeFromPath(window.location.pathname))
+      setQuery('')
+      setMobileNavOpen(false)
+      setAccountMenuOpen(false)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileNavOpen(false)
+        setAccountMenuOpen(false)
+      }
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [])
+
+  const businesses = useMemo<BusinessRow[]>(() => portfolio.businesses.map((business) => {
+    const ownedServices = portfolio.services.filter((service) => service.owner_slug === business.slug).map((service) => service.name)
+    return {
+      ...business,
+      category: business.kind === 'subsidiary' ? 'Subsidiary' : 'Business unit',
+      services: ownedServices.length ? ownedServices.join(', ') : 'No services registered',
+    }
+  }), [portfolio])
+  const services = portfolio.services
+  const selectedBusiness = route.section === 'Businesses' ? businesses.find((business) => business.slug === route.slug) : undefined
+  const selectedService = route.section === 'Services' ? services.find((service) => service.slug === route.slug) : undefined
+  useEffect(() => {
+    const recordName = selectedBusiness?.name ?? selectedService?.name
+    document.title = `${recordName ?? section} | Drixel Labs Inc`
+  }, [section, selectedBusiness?.name, selectedService?.name])
+  const activeBusinessCount = businesses.filter((business) => business.status === 'active').length
+  const activeServiceCount = services.filter((service) => service.status === 'active').length
   const filteredBusinesses = useMemo(() => businesses.filter((business) =>
     `${business.name} ${business.category} ${business.services}`.toLowerCase().includes(query.toLowerCase()),
-  ), [query])
+  ), [businesses, query])
   const filteredServices = useMemo(() => services.filter((service) =>
-    `${service.name} ${service.owner} ${service.type}`.toLowerCase().includes(query.toLowerCase()),
-  ), [query])
-  const showSearch = section === 'Overview' || section === 'Businesses' || section === 'Services'
+    `${service.name} ${service.owner_name}`.toLowerCase().includes(query.toLowerCase()),
+  ), [services, query])
+  const showSearch = !route.slug && (section === 'Overview' || section === 'Businesses' || section === 'Services')
 
-  const selectSection = (next: Section) => {
-    setSection(next)
+  const navigateTo = (path: string, nextRoute: AppRoute) => {
+    window.history.pushState(null, '', path)
+    setRoute(nextRoute)
     setQuery('')
     setMobileNavOpen(false)
+    setAccountMenuOpen(false)
   }
+
+  const selectSection = (next: Section) => navigateTo(sectionPaths[next], { section: next })
+  const openBusiness = (slug: string) => navigateTo(`/businesses/${encodeURIComponent(slug)}`, { section: 'Businesses', slug })
+  const openService = (slug: string) => navigateTo(`/services/${encodeURIComponent(slug)}`, { section: 'Services', slug })
 
   return (
     <div className="app-shell">
@@ -44,27 +145,28 @@ function App() {
           <span className="brand-name">DRIXEL</span>
           <span className="brand-caption">LABS INC</span>
         </div>
-        <div className="workspace-switcher">
+        <div className="workspace-switcher" aria-label="Current workspace">
           <span className="workspace-label">WORKSPACE</span>
           <strong>Drixel Labs Inc</strong>
-          <span className="workspace-caret" aria-hidden="true">⌄</span>
+          <span className="workspace-context">Group administration</span>
         </div>
-        <nav className="main-nav" aria-label="Main navigation">
+        <nav id="group-navigation" className="main-nav" aria-label="Main navigation">
           <span className="nav-label">GROUP ADMINISTRATION</span>
           {sections.map((item) => (
-            <button
+            <a
               key={item}
+              href={sectionPaths[item]}
               className={`nav-item ${section === item ? 'nav-item-active' : ''}`}
-              onClick={() => selectSection(item)}
+              onClick={(event) => followSectionLink(event, () => selectSection(item))}
               aria-current={section === item ? 'page' : undefined}
+              aria-label={`Open ${item} page`}
             >
               <span>{item}</span>
-              {item === 'Accounts' && <span className="nav-count">—</span>}
-            </button>
+            </a>
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="connection-row"><span className="connection-dot" />Identity provider not connected</div>
+          <button className="connection-row" onClick={() => selectSection('Settings')}><span className="connection-dot" />Identity provider not connected</button>
           <div className="sidebar-version">Drixel Platform · Foundation</div>
         </div>
       </aside>
@@ -73,25 +175,40 @@ function App() {
 
       <div className="main-column">
         <header className="topbar">
-          <button className="mobile-menu" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-label="Toggle navigation">Menu</button>
-          <div className="breadcrumb"><span>Drixel Labs Inc</span><span className="breadcrumb-divider">/</span><strong>{section}</strong></div>
+          <button className="mobile-menu" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-expanded={mobileNavOpen} aria-controls="group-navigation">Menu</button>
+          <div className="breadcrumb"><a href={sectionPaths.Overview} onClick={(event) => followSectionLink(event, () => selectSection('Overview'))}>Drixel Labs Inc</a><span className="breadcrumb-divider">/</span>{route.slug ? <><a href={sectionPaths[section]} onClick={(event) => followSectionLink(event, () => selectSection(section))}>{section}</a><span className="breadcrumb-divider">/</span><strong>{selectedBusiness?.name ?? selectedService?.name ?? route.slug}</strong></> : <strong>{section}</strong>}</div>
           <div className="topbar-actions">
-            {showSearch && <label className="search-field">
-              <span className="search-label">Search</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={section === 'Businesses' ? 'businesses' : section === 'Services' ? 'services' : 'portfolio'} aria-label={`Search ${section.toLowerCase()}`} />
-            </label>}
-            <button className="user-control" aria-label="Account menu"><span className="user-initials">DL</span><span className="user-control-text">Group administrator</span></button>
+            {showSearch && <div className="search-field">
+              <label className="search-label" htmlFor="portfolio-search">Search</label>
+              <input id="portfolio-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={section === 'Businesses' ? 'businesses' : section === 'Services' ? 'services' : 'portfolio'} />
+              {query && <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">Clear</button>}
+            </div>}
+            <div className="account-menu-wrap">
+              <button className="user-control" aria-label="Identity status" aria-expanded={accountMenuOpen} aria-controls="identity-status-panel" onClick={() => setAccountMenuOpen((open) => !open)}>
+                <span className="user-initials">DL</span><span className="user-control-text">Not signed in</span>
+              </button>
+              {accountMenuOpen && <div id="identity-status-panel" className="account-popover" role="region" aria-label="Identity connection status">
+                <strong>Drixel ID</strong>
+                <span>Single sign-on is not configured.</span>
+                <span className="account-popover-status">This console currently reads the business directory only.</span>
+                <a className="text-button" href={sectionPaths.Settings} onClick={(event) => followSectionLink(event, () => selectSection('Settings'))}>Identity settings <span aria-hidden="true">→</span></a>
+              </div>}
+            </div>
           </div>
         </header>
 
         <main className="page-content">
-          {section === 'Overview' && <Overview onNavigate={selectSection} filteredBusinesses={filteredBusinesses} filteredServices={filteredServices} />}
-          {section === 'Businesses' && <BusinessesPage rows={filteredBusinesses} />}
-          {section === 'Services' && <ServicesPage rows={filteredServices} />}
+          {section === 'Overview' && <Overview onNavigate={selectSection} onOpenBusiness={openBusiness} onOpenService={openService} onRetry={() => setDirectoryRefresh((value) => value + 1)} filteredBusinesses={filteredBusinesses} filteredServices={filteredServices} businessCount={businesses.length} activeBusinessCount={activeBusinessCount} serviceCount={services.length} activeServiceCount={activeServiceCount} loading={directoryLoading} error={directoryError} />}
+          {section === 'Businesses' && (route.slug
+            ? <BusinessDetailPage business={selectedBusiness} services={services.filter((service) => service.owner_slug === route.slug)} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Businesses')} onOpenService={openService} onNavigate={selectSection} />
+            : <BusinessesPage rows={filteredBusinesses} totalCount={businesses.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenBusiness={openBusiness} />)}
+          {section === 'Services' && (route.slug
+            ? <ServiceDetailPage service={selectedService} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Services')} onOpenBusiness={openBusiness} />
+            : <ServicesPage rows={filteredServices} totalCount={services.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenService={openService} onOpenBusiness={openBusiness} />)}
           {section === 'Accounts' && <AccountsPage onNavigate={selectSection} />}
           {section === 'Access roles' && <RolesPage />}
           {section === 'Audit log' && <AuditPage />}
-          {section === 'Settings' && <SettingsPage />}
+          {section === 'Settings' && <SettingsPage businessCount={businesses.length} serviceCount={services.length} directoryConnected={!directoryLoading && !directoryError} />}
         </main>
       </div>
     </div>
@@ -111,73 +228,212 @@ function PageHeading({ eyebrow, title, description, action }: { eyebrow: string;
   )
 }
 
-function Overview({ onNavigate, filteredBusinesses, filteredServices }: { onNavigate: (section: Section) => void; filteredBusinesses: typeof businesses; filteredServices: typeof services }) {
+function Overview({ onNavigate, onOpenBusiness, onOpenService, onRetry, filteredBusinesses, filteredServices, businessCount, activeBusinessCount, serviceCount, activeServiceCount, loading, error }: { onNavigate: (section: Section) => void; onOpenBusiness: (slug: string) => void; onOpenService: (slug: string) => void; onRetry: () => void; filteredBusinesses: BusinessRow[]; filteredServices: Service[]; businessCount: number; activeBusinessCount: number; serviceCount: number; activeServiceCount: number; loading: boolean; error: boolean }) {
+  const totalValue = (count: number) => loading ? '…' : error ? 'Unavailable' : String(count)
+
   return (
     <>
-      <PageHeading eyebrow="GROUP ADMINISTRATION" title="Overview" description="Manage Drixel businesses, services, and account access from one place." />
-      <div className="status-banner">
-        <div>
-          <strong>Account sign-in is not connected yet</strong>
-          <p>The business directory is ready. Connect an identity provider and API to load and manage real accounts.</p>
+      <PageHeading eyebrow="DRIXEL LABS INC  /  GROUP ADMINISTRATION" title="Portfolio overview" description="A live register of the businesses and services connected to the group." />
+
+      <section className={`status-banner ${error ? 'status-banner-error' : loading ? 'status-banner-loading' : 'status-banner-connected'}`} role="status">
+        <div className="status-copy">
+          <span className="status-kicker">DIRECTORY STATUS</span>
+          <strong>{loading ? 'Connecting to the group directory' : error ? 'Directory connection unavailable' : 'Group directory is connected'}</strong>
+          <p>{loading ? 'Loading current business and service records.' : error ? 'Check that Docker and the API are running, then retry.' : 'Business and service records are being read from the Drixel directory.'}</p>
         </div>
-        <button className="button button-secondary" onClick={() => onNavigate('Settings')}>View setup</button>
+        <div className="status-actions">
+          <button className="button button-secondary" onClick={onRetry}>{error ? 'Retry connection' : 'Refresh directory'}</button>
+          <button className="button button-quiet" onClick={() => onNavigate('Settings')}>Directory settings</button>
+        </div>
+      </section>
+
+      <section className="metric-grid" aria-label="Live portfolio summary">
+        <Metric label="Businesses" value={totalValue(businessCount)} detail="Registered group units" onClick={() => onNavigate('Businesses')} />
+        <Metric label="Active businesses" value={totalValue(activeBusinessCount)} detail={error ? 'Unavailable' : 'Currently active'} />
+        <Metric label="Services" value={totalValue(serviceCount)} detail="Products and shared services" onClick={() => onNavigate('Services')} />
+        <Metric label="Active services" value={totalValue(activeServiceCount)} detail={error ? 'Unavailable' : 'Currently active'} />
+      </section>
+
+      <div className="overview-grid">
+        <section className="content-panel overview-businesses">
+          <div className="panel-heading">
+            <div><h2>Businesses</h2><p>Operating units registered under Drixel Labs Inc.</p></div>
+            <a className="text-button" href={sectionPaths.Businesses} onClick={(event) => followSectionLink(event, () => onNavigate('Businesses'))}>All businesses <span aria-hidden="true">→</span></a>
+          </div>
+          <BusinessTable rows={filteredBusinesses} compact onOpenBusiness={onOpenBusiness} />
+        </section>
+
+        <section className="content-panel overview-services">
+          <div className="panel-heading">
+            <div><h2>Services</h2><p>Products and shared group services.</p></div>
+            <a className="text-button" href={sectionPaths.Services} onClick={(event) => followSectionLink(event, () => onNavigate('Services'))}>All services <span aria-hidden="true">→</span></a>
+          </div>
+          <div className="service-summary-list">
+            {filteredServices.slice(0, 5).map((service) => (
+              <div className="service-summary-row" key={service.slug}>
+                <a href={`/services/${encodeURIComponent(service.slug)}`} onClick={(event) => followSectionLink(event, () => onOpenService(service.slug))}><strong>{service.name}</strong></a>
+                <a href={`/businesses/${encodeURIComponent(service.owner_slug)}`} onClick={(event) => followSectionLink(event, () => onOpenBusiness(service.owner_slug))}>{service.owner_name}</a>
+                <span className="service-type">{statusLabel(service.status)}</span>
+              </div>
+            ))}
+            {!loading && filteredServices.length === 0 && <div className="empty-table">{error ? 'Services are unavailable while the directory is disconnected.' : 'No services match this search.'}</div>}
+          </div>
+        </section>
       </div>
 
-      <section className="metric-grid" aria-label="Portfolio summary">
-        <Metric label="Business units" value="4" detail="Under Drixel Labs Inc" />
-        <Metric label="Registered services" value="5" detail="Group and 3 business units" />
-        <Metric label="Synced accounts" value="—" detail="Identity provider not connected" />
-        <Metric label="Pending access changes" value="—" detail="Audit API not connected" />
-      </section>
-
-      <section className="content-panel">
-        <div className="panel-heading">
-          <div><h2>Business units</h2><p>Businesses registered under the Drixel Labs group.</p></div>
-          <button className="text-button" onClick={() => onNavigate('Businesses')}>View all <span aria-hidden="true">→</span></button>
+      <section className="readiness-panel">
+        <div className="readiness-copy">
+          <span className="eyebrow">IDENTITY AND ACCESS</span>
+          <h2>Account administration is not connected</h2>
+          <p>Drixel ID and an authenticated management API are required before this console can list accounts, invite users, or change permissions.</p>
         </div>
-        <BusinessTable rows={filteredBusinesses} compact />
+        <button className="button button-secondary" onClick={() => onNavigate('Settings')}>Review setup</button>
       </section>
-
-      <section className="content-panel service-panel">
-        <div className="panel-heading">
-          <div><h2>Services</h2><p>Products and services registered in the group directory.</p></div>
-          <button className="text-button" onClick={() => onNavigate('Services')}>View all <span aria-hidden="true">→</span></button>
-        </div>
-        <div className="service-summary-list">
-          {filteredServices.slice(0, 4).map((service) => <div className="service-summary-row" key={service.name}><strong>{service.name}</strong><span>{service.owner}</span><span className="service-type">{service.type}</span></div>)}
-          {filteredServices.length === 0 && <div className="empty-table">No services match this search.</div>}
-        </div>
-      </section>
-      <footer className="page-footer">Drixel Labs Inc <span>·</span> Group directory</footer>
+      <footer className="page-footer">Directory records are read-only in this console. Account and access data remain protected until identity services are configured.</footer>
     </>
   )
 }
 
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <div className="metric-card"><span className="metric-label">{label}</span><strong className="metric-value">{value}</strong><span className="metric-detail">{detail}</span></div>
+function Metric({ label, value, detail, onClick }: { label: string; value: string; detail: string; onClick?: () => void }) {
+  const content = <><span className="metric-label">{label}</span><strong className="metric-value">{value}</strong><span className="metric-detail">{detail}</span></>
+  return onClick
+    ? <button type="button" className="metric-card metric-card-button" onClick={onClick}>{content}<span className="metric-arrow" aria-hidden="true">→</span></button>
+    : <div className="metric-card">{content}</div>
 }
 
-function BusinessesPage({ rows }: { rows: typeof businesses }) {
-  return <><PageHeading eyebrow="PORTFOLIO" title="Businesses" description="The operating units connected to Drixel Labs Inc." action={<button className="button button-primary" disabled title="Business creation will be enabled when the API is connected">Add business</button>} /><div className="content-panel"><div className="panel-heading"><div><h2>Registered businesses</h2><p>{rows.length} business units in the group directory.</p></div><span className="panel-meta">DIRECTORY</span></div><BusinessTable rows={rows} /></div><footer className="page-footer">Business registration is stored in the PostgreSQL portfolio seed.</footer></>
+function DirectoryNotice({ loading, error, onRetry }: { loading: boolean; error: boolean; onRetry: () => void }) {
+  if (!loading && !error) return null
+  return <div className="status-banner" role="status"><div><strong>{loading ? 'Loading the group directory' : 'Group directory unavailable'}</strong><p>{loading ? 'Reading current business and service records.' : 'Start the local API and database, then retry to load current records.'}</p></div>{error && <button className="button button-secondary" onClick={onRetry}>Retry</button>}</div>
 }
 
-function BusinessTable({ rows, compact = false }: { rows: typeof businesses; compact?: boolean }) {
+type StatusFilter = 'all' | 'active' | 'suspended' | 'closed'
+
+function CsvExportButton({ label, filename, headers, rows }: { label: string; filename: string; headers: string[]; rows: string[][] }) {
+  const exportCsv = () => {
+    const safeCell = (value: string) => {
+      const safeValue = /^[\t\r\n ]*[=+\-@]/.test(value) ? `'${value}` : value
+      return `"${safeValue.replaceAll('"', '""')}"`
+    }
+    const contents = [headers, ...rows].map((row) => row.map(safeCell).join(',')).join('\r\n')
+    const blob = new Blob([`\uFEFF${contents}`], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+
+  return <button className="button button-secondary" type="button" onClick={exportCsv}>{label}</button>
+}
+
+function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChange: (value: StatusFilter) => void }) {
+  return (
+    <label className="status-filter">
+      <span>Status</span>
+      <select value={value} onChange={(event) => onChange(event.target.value as StatusFilter)}>
+        <option value="all">All statuses</option>
+        <option value="active">Active</option>
+        <option value="suspended">Suspended</option>
+        <option value="closed">Closed</option>
+      </select>
+    </label>
+  )
+}
+
+function BusinessesPage({ rows, totalCount, loading, error, onRetry, onOpenBusiness }: { rows: BusinessRow[]; totalCount: number; loading: boolean; error: boolean; onRetry: () => void; onOpenBusiness: (slug: string) => void }) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const visibleRows = statusFilter === 'all' ? rows : rows.filter((row) => row.status === statusFilter)
+  const exportRows = visibleRows.map((row) => [row.name, row.category, row.services, statusLabel(row.status)])
+
+  return <>
+    <PageHeading eyebrow="PORTFOLIO" title="Businesses" description="Review the operating units connected to Drixel Labs Inc." />
+    <DirectoryNotice loading={loading} error={error} onRetry={onRetry} />
+    <div className="content-panel">
+      <div className="panel-heading directory-panel-heading">
+        <div><h2>Registered businesses</h2><p>{visibleRows.length} shown · {totalCount} total in the group directory</p></div>
+        <span className="panel-meta">READ ONLY</span>
+      </div>
+      <div className="directory-toolbar">
+        {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={setStatusFilter} /><CsvExportButton label="Export CSV" filename="drixel-businesses.csv" headers={['Business', 'Type', 'Services', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
+      </div>
+      <BusinessTable rows={visibleRows} onOpenBusiness={onOpenBusiness} emptyMessage={statusFilter === 'all' ? 'No businesses match the current search.' : `No ${statusFilter} businesses match the current search.`} />
+    </div>
+    <footer className="page-footer">Business records are read from the PostgreSQL group directory. Editing requires the authenticated management API.</footer>
+  </>
+}
+
+function BusinessTable({ rows, compact = false, emptyMessage = 'No business units are available.', onOpenBusiness }: { rows: BusinessRow[]; compact?: boolean; emptyMessage?: string; onOpenBusiness?: (slug: string) => void }) {
   return (
     <div className={`table-scroll ${compact ? 'table-scroll-compact' : ''}`}>
-      <table className="data-table"><thead><tr><th>BUSINESS</th><th>SECTOR</th><th>SERVICES</th><th>STATUS</th></tr></thead>
-        <tbody>{rows.map((row) => <tr key={row.name}><td><strong className="table-primary">{row.name}</strong></td><td>{row.category}</td><td>{row.services}</td><td><span className="status-tag">{row.status}</span></td></tr>)}
-        {rows.length === 0 && <tr><td className="empty-table" colSpan={4}>No business units match this search.</td></tr>}</tbody>
+      <table className="data-table"><thead><tr><th>BUSINESS</th><th>TYPE</th><th>SERVICES</th><th>STATUS</th></tr></thead>
+        <tbody>{rows.map((row) => <tr key={row.id}><td><a className="table-primary table-record-link" href={`/businesses/${encodeURIComponent(row.slug)}`} onClick={(event) => onOpenBusiness && followSectionLink(event, () => onOpenBusiness(row.slug))}>{row.name}</a></td><td>{row.category}</td><td>{row.services}</td><td><span className="status-tag">{statusLabel(row.status)}</span></td></tr>)}
+        {rows.length === 0 && <tr><td className="empty-table" colSpan={4}>{emptyMessage}</td></tr>}</tbody>
       </table>
     </div>
   )
 }
 
-function ServicesPage({ rows }: { rows: typeof services }) {
-  return <><PageHeading eyebrow="PORTFOLIO" title="Services" description="Products and services owned by Drixel businesses." action={<button className="button button-primary" disabled title="Service registration will be enabled when the API is connected">Add service</button>} /><div className="content-panel"><div className="panel-heading"><div><h2>Registered services</h2><p>{rows.length} services in the group directory.</p></div><span className="panel-meta">DIRECTORY</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>SERVICE</th><th>OWNER</th><th>CATEGORY</th><th>STATUS</th></tr></thead><tbody>{rows.map((row) => <tr key={row.name}><td><strong className="table-primary">{row.name}</strong></td><td>{row.owner}</td><td>{row.type}</td><td><span className="status-tag">Registered</span></td></tr>)}{rows.length === 0 && <tr><td className="empty-table" colSpan={4}>No services match this search.</td></tr>}</tbody></table></div></div><footer className="page-footer">Each service has one owning business and its own data boundary.</footer></>
+function ServicesPage({ rows, totalCount, loading, error, onRetry, onOpenService, onOpenBusiness }: { rows: Service[]; totalCount: number; loading: boolean; error: boolean; onRetry: () => void; onOpenService: (slug: string) => void; onOpenBusiness: (slug: string) => void }) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const visibleRows = statusFilter === 'all' ? rows : rows.filter((row) => row.status === statusFilter)
+  const exportRows = visibleRows.map((row) => [row.name, row.owner_name, statusLabel(row.status)])
+
+  return <>
+    <PageHeading eyebrow="PORTFOLIO" title="Services" description="Review products and services owned by Drixel businesses." />
+    <DirectoryNotice loading={loading} error={error} onRetry={onRetry} />
+    <div className="content-panel">
+      <div className="panel-heading directory-panel-heading">
+        <div><h2>Registered services</h2><p>{visibleRows.length} shown · {totalCount} total in the group directory</p></div>
+        <span className="panel-meta">READ ONLY</span>
+      </div>
+      <div className="directory-toolbar">
+        {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={setStatusFilter} /><CsvExportButton label="Export CSV" filename="drixel-services.csv" headers={['Service', 'Business', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
+      </div>
+      <div className="table-scroll"><table className="data-table"><thead><tr><th>SERVICE</th><th>BUSINESS</th><th>STATUS</th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id}><td><a className="table-primary table-record-link" href={`/services/${encodeURIComponent(row.slug)}`} onClick={(event) => followSectionLink(event, () => onOpenService(row.slug))}>{row.name}</a></td><td><a className="table-record-link" href={`/businesses/${encodeURIComponent(row.owner_slug)}`} onClick={(event) => followSectionLink(event, () => onOpenBusiness(row.owner_slug))}>{row.owner_name}</a></td><td><span className="status-tag">{statusLabel(row.status)}</span></td></tr>)}{visibleRows.length === 0 && <tr><td className="empty-table" colSpan={3}>{statusFilter === 'all' ? 'No services match the current search.' : `No ${statusFilter} services match the current search.`}</td></tr>}</tbody></table></div>
+    </div>
+    <footer className="page-footer">Each service has one owning business and its own data boundary. Registration requires the authenticated management API.</footer>
+  </>
+}
+
+function RecordNotFound({ kind, slug, onBack }: { kind: 'business' | 'service'; slug: string; onBack: () => void }) {
+  return <>
+    <PageHeading eyebrow="PORTFOLIO RECORD" title={`${kind === 'business' ? 'Business' : 'Service'} not found`} description={`The directory does not contain a ${kind} with the identifier “${slug}”.`} />
+    <div className="record-not-found"><strong>This record may have been removed or its address may be incorrect.</strong><button className="button button-secondary" onClick={onBack}>Back to {kind === 'business' ? 'businesses' : 'services'}</button></div>
+  </>
+}
+
+function BusinessDetailPage({ business, services, loading, error, onRetry, onBack, onOpenService, onNavigate }: { business?: BusinessRow; services: Service[]; loading: boolean; error: boolean; onRetry: () => void; onBack: () => void; onOpenService: (slug: string) => void; onNavigate: (section: Section) => void }) {
+  if (!business && !loading && !error) return <RecordNotFound kind="business" slug={window.location.pathname.split('/').at(-1) ?? ''} onBack={onBack} />
+  if (!business) return <><PageHeading eyebrow="PORTFOLIO" title="Business record" description="Loading the selected business from the group directory." /><DirectoryNotice loading={loading} error={error} onRetry={onRetry} /></>
+
+  return <>
+    <PageHeading eyebrow="BUSINESS RECORD" title={business.name} description="Business information and services registered in the Drixel group directory." action={<button className="button button-secondary" onClick={onBack}>All businesses</button>} />
+    <DirectoryNotice loading={loading} error={error} onRetry={onRetry} />
+    <div className="detail-grid">
+      <section className="content-panel detail-card"><div className="panel-heading"><div><h2>Business profile</h2><p>Current directory record</p></div><span className="status-tag">{statusLabel(business.status)}</span></div><dl className="detail-facts"><div><dt>Business name</dt><dd>{business.name}</dd></div><div><dt>Directory address</dt><dd>{business.slug}</dd></div><div><dt>Organization type</dt><dd>{business.category}</dd></div><div><dt>Registered services</dt><dd>{services.length}</dd></div></dl></section>
+      <section className="content-panel detail-card"><div className="panel-heading"><div><h2>Services</h2><p>Services owned by this business</p></div><span className="panel-meta">{services.length} REGISTERED</span></div>{services.length ? <div className="related-record-list">{services.map((service) => <a className="related-record" key={service.id} href={`/services/${encodeURIComponent(service.slug)}`} onClick={(event) => followSectionLink(event, () => onOpenService(service.slug))}><span><strong>{service.name}</strong><small>Service record</small></span><span className="status-tag">{statusLabel(service.status)}</span></a>)}</div> : <div className="related-empty">No services are currently registered to this business.</div>}</section>
+    </div>
+    <div className="record-context"><strong>Group parent</strong><a href={sectionPaths.Overview} onClick={(event) => followSectionLink(event, () => onNavigate('Overview'))}>Drixel Labs Inc</a><span>Directory records are read-only in this console.</span></div>
+  </>
+}
+
+function ServiceDetailPage({ service, loading, error, onRetry, onBack, onOpenBusiness }: { service?: Service; loading: boolean; error: boolean; onRetry: () => void; onBack: () => void; onOpenBusiness: (slug: string) => void }) {
+  if (!service && !loading && !error) return <RecordNotFound kind="service" slug={window.location.pathname.split('/').at(-1) ?? ''} onBack={onBack} />
+  if (!service) return <><PageHeading eyebrow="PORTFOLIO" title="Service record" description="Loading the selected service from the group directory." /><DirectoryNotice loading={loading} error={error} onRetry={onRetry} /></>
+
+  return <>
+    <PageHeading eyebrow="SERVICE RECORD" title={service.name} description="Service information and ownership from the Drixel group directory." action={<button className="button button-secondary" onClick={onBack}>All services</button>} />
+    <DirectoryNotice loading={loading} error={error} onRetry={onRetry} />
+    <section className="content-panel detail-card"><div className="panel-heading"><div><h2>Service profile</h2><p>Current directory record</p></div><span className="status-tag">{statusLabel(service.status)}</span></div><dl className="detail-facts"><div><dt>Service name</dt><dd>{service.name}</dd></div><div><dt>Directory address</dt><dd>{service.slug}</dd></div><div><dt>Owning business</dt><dd><a className="detail-owner-link" href={`/businesses/${encodeURIComponent(service.owner_slug)}`} onClick={(event) => followSectionLink(event, () => onOpenBusiness(service.owner_slug))}>{service.owner_name} <span aria-hidden="true">→</span></a></dd></div><div><dt>Access boundary</dt><dd>Owned by {service.owner_name}</dd></div></dl></section>
+    <footer className="page-footer">Service membership and account access are managed through Drixel ID when identity services are connected.</footer>
+  </>
 }
 
 function AccountsPage({ onNavigate }: { onNavigate: (section: Section) => void }) {
-  return <><PageHeading eyebrow="IDENTITY" title="Accounts" description="Review employee and user identities across Drixel services." action={<button className="button button-primary" disabled title="Invitations require identity-provider and API integration">Invite account</button>} /><div className="setup-panel"><div className="setup-index">01</div><div className="setup-copy"><span className="eyebrow">REQUIRED SETUP</span><h2>Connect Drixel ID to an identity provider</h2><p>Accounts are not loaded from a live identity provider yet. Once connected, this page will show verified identities, employee and customer memberships, and service access.</p><ul><li>One person can use a single sign-in across Drixel services.</li><li>Employee and customer access remain separate.</li><li>Each business only sees accounts and permissions in its own scope.</li></ul><div className="setup-actions"><button className="button button-primary" onClick={() => onNavigate('Settings')}>Open identity settings</button><span>Account data is not simulated.</span></div></div></div><div className="info-strip"><strong>Storage model</strong><span>Global account IDs with separate organization memberships and product roles.</span></div><footer className="page-footer">No accounts are displayed until a verified identity provider connection is configured.</footer></>
+  return <><PageHeading eyebrow="IDENTITY" title="Accounts" description="Review employee and user identities across Drixel services." /><div className="setup-panel"><div className="setup-index">01</div><div className="setup-copy"><span className="eyebrow">REQUIRED SETUP</span><h2>Connect Drixel ID to an identity provider</h2><p>Accounts are not loaded from a live identity provider yet. Once connected, this page will show verified identities, employee and customer memberships, and service access.</p><ul><li>One person can use a single sign-in across Drixel services.</li><li>Employee and customer access remain separate.</li><li>Each business only sees accounts and permissions in its own scope.</li></ul><div className="setup-actions"><button className="button button-primary" onClick={() => onNavigate('Settings')}>Open identity settings</button><span>Account data is not simulated.</span></div></div></div><div className="info-strip"><strong>Storage model</strong><span>Global account IDs with separate organization memberships and product roles.</span></div><footer className="page-footer">Account listing and invitations require a connected identity provider and authenticated management API.</footer></>
 }
 
 function RolesPage() {
@@ -200,8 +456,8 @@ function AuditPage() {
   return <><PageHeading eyebrow="GOVERNANCE" title="Audit log" description="Track important access and administration events across the group." /><div className="empty-state"><div className="empty-state-title">Audit events will appear here</div><p>The database is prepared for administrative audit events. Live events will be shown after the management API is connected.</p></div></>
 }
 
-function SettingsPage() {
-  return <><PageHeading eyebrow="CONFIGURATION" title="Settings" description="Configure the shared identity and group directory services." /><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Identity provider</h2><p>Single sign-on and account verification.</p></div><span className="status-tag status-tag-muted">Not connected</span></div><div className="settings-row"><div><strong>Provider</strong><span>Not selected</span></div><div><strong>Protocol</strong><span>OpenID Connect</span></div><div><strong>Multi-factor authentication</strong><span>Required for administrators</span></div><button className="button button-secondary" disabled title="Provider configuration is not implemented">Configure</button></div></section><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Group directory</h2><p>Business and service registry in PostgreSQL.</p></div><span className="status-tag">Seeded</span></div><div className="settings-row"><div><strong>Parent organization</strong><span>Drixel Labs Inc</span></div><div><strong>Business units</strong><span>4 registered</span></div><div><strong>Services</strong><span>5 registered</span></div></div></section><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Security boundaries</h2><p>Current database controls.</p></div></div><ul className="security-list"><li>Account credentials remain with the identity provider.</li><li>Database row-level security is enabled for private group data.</li><li>Service access is designed to use scoped membership and roles.</li></ul></section><footer className="page-footer">Configuration changes will be available after the identity and management API are connected.</footer></>
+function SettingsPage({ businessCount, serviceCount, directoryConnected }: { businessCount: number; serviceCount: number; directoryConnected: boolean }) {
+  return <><PageHeading eyebrow="CONFIGURATION" title="Settings" description="Configure the shared identity and group directory services." /><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Identity provider</h2><p>Single sign-on and account verification.</p></div><span className="status-tag status-tag-muted">Not connected</span></div><div className="settings-row"><div><strong>Provider</strong><span>Not selected</span></div><div><strong>Protocol</strong><span>OpenID Connect</span></div><div><strong>Multi-factor authentication</strong><span>Required for administrators</span></div></div><div className="settings-note">Provider setup is pending. Configuration controls will appear after an authenticated identity management service is connected.</div></section><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Group directory</h2><p>Business and service registry in PostgreSQL.</p></div><span className={`status-tag ${directoryConnected ? '' : 'status-tag-muted'}`}>{directoryConnected ? 'Connected' : 'Unavailable'}</span></div><div className="settings-row"><div><strong>Parent organization</strong><span>Drixel Labs Inc</span></div><div><strong>Business units</strong><span>{directoryConnected ? `${businessCount} registered` : 'Unavailable'}</span></div><div><strong>Services</strong><span>{directoryConnected ? `${serviceCount} registered` : 'Unavailable'}</span></div></div></section><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Security boundaries</h2><p>Current database controls.</p></div></div><ul className="security-list"><li>The portfolio API uses a dedicated read-only database role.</li><li>Row-level security hides customer workspaces from the portfolio API.</li><li>Account data remains unavailable until Drixel ID is connected.</li></ul></section><footer className="page-footer">Identity and account administration require an authenticated management API.</footer></>
 }
 
 export default App

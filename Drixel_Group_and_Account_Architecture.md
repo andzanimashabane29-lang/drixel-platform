@@ -161,6 +161,12 @@ Integrate one service end to end. Verify employee access, customer access, accou
 ### Phase 5 — Progressive rollout
 Connect each remaining service one at a time. Migrate accounts carefully, preserve service data ownership, and review access after each launch.
 
+## Implementation status
+
+- The initial group, business, service, account, membership, role, consent, and audit schema is in `db/migrations/001_initial.sql`.
+- The admin console reads group and business portfolio records through a read-only API. The `drixel_directory_reader` database role cannot read customer workspaces, accounts, memberships, role assignments, consent records, or audit events.
+- Account sign-in, invitations, access changes, and audit-event views remain unavailable until Drixel ID and an authenticated management API are configured. The console does not substitute sample identities for real accounts.
+
 ## Decisions to record before implementation
 
 - Which current and planned ventures belong in the Drixel group portfolio
