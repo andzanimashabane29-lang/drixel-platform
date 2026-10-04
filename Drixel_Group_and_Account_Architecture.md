@@ -164,11 +164,11 @@ Connect each remaining service one at a time. Migrate accounts carefully, preser
 ## Implementation status
 
 - The initial group, business, service, account, membership, role, consent, and audit schema is in `db/migrations/001_initial.sql`.
-- The admin console reads group and business portfolio records through a read-only API. The `drixel_directory_reader` database role cannot read customer workspaces, accounts, memberships, role assignments, consent records, or audit events.
+- The admin console reads portfolio records through the restricted directory API. Group owner and group administrator writes use the separate OIDC-protected management API, are limited to direct businesses and their services, and create audit events. The `drixel_directory_reader` role cannot read customer workspaces, accounts, memberships, role assignments, consent records, or audit events.
 - The account console uses OIDC authorization-code flow with PKCE and keeps tokens in memory. The API verifies RS256 JWTs using the configured issuer, audience, and JWKS URI.
 - A separate management database role supports account listing, business-scoped invitations, invitation acceptance, and audit events. Invitation roles activate only after a matching verified identity accepts. Identity links use issuer and subject; email text alone cannot merge accounts.
 - OIDC provider values and the initial group-owner identity still need environment configuration. The provider must issue JWT access tokens with the configured API audience. Invitation delivery is manual because no email sender is configured.
-- Business/service editing, role changes, customer-workspace access, and service-by-service account integration are not implemented yet.
+- Scoped role changes, customer-workspace access, and service-by-service account integration are not implemented yet.
 
 ## Decisions to record before implementation
 

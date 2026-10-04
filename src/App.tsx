@@ -300,10 +300,10 @@ function App() {
           {section === 'Overview' && <Overview onNavigate={selectSection} onOpenBusiness={openBusiness} onOpenService={openService} onRetry={() => setDirectoryRefresh((value) => value + 1)} filteredBusinesses={filteredBusinesses} filteredServices={filteredServices} businessCount={businesses.length} activeBusinessCount={activeBusinessCount} serviceCount={services.length} activeServiceCount={activeServiceCount} loading={directoryLoading} error={directoryError} />}
           {section === 'Businesses' && (route.slug
             ? <BusinessDetailPage business={selectedBusiness} services={services.filter((service) => service.owner_slug === route.slug)} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Businesses')} onOpenService={openService} onNavigate={selectSection} />
-            : <BusinessesPage rows={filteredBusinesses} totalCount={businesses.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenBusiness={openBusiness} />)}
+            : <BusinessesPage rows={filteredBusinesses} totalCount={businesses.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenBusiness={openBusiness} accessToken={accessToken} onPortfolioChanged={() => setDirectoryRefresh((value) => value + 1)} />)}
           {section === 'Services' && (route.slug
             ? <ServiceDetailPage service={selectedService} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Services')} onOpenBusiness={openBusiness} />
-            : <ServicesPage rows={filteredServices} totalCount={services.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenService={openService} onOpenBusiness={openBusiness} />)}
+            : <ServicesPage rows={filteredServices} totalCount={services.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenService={openService} onOpenBusiness={openBusiness} accessToken={accessToken} groupBusinesses={businesses} onPortfolioChanged={() => setDirectoryRefresh((value) => value + 1)} />)}
           {section === 'Accounts' && <AccountsPage onNavigate={selectSection} accessToken={accessToken} idToken={idToken} businesses={businesses} services={services} acceptToken={route.acceptToken} onSignIn={() => { void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.')) }} authError={authError} />}
           {section === 'Access roles' && <RolesPage />}
           {section === 'Audit log' && <AuditPage accessToken={accessToken} onSignIn={() => { void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.')) }} />}
@@ -388,7 +388,7 @@ function Overview({ onNavigate, onOpenBusiness, onOpenService, onRetry, filtered
         </div>
         <button className="button button-secondary" onClick={() => onNavigate('Settings')}>Review setup</button>
       </section>
-      <footer className="page-footer">Directory records are read-only in this console. Account and access data remain protected until identity services are configured.</footer>
+      <footer className="page-footer">Portfolio changes are restricted to group administrators. Account and access data remain protected until identity services are configured.</footer>
     </>
   )
 }
@@ -469,7 +469,84 @@ function BusinessFilterControl({ value, businesses, onChange }: { value: string;
   return <label className="status-filter"><span>Business</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="all">All businesses</option>{businesses.map((business) => <option key={business} value={business}>{business}</option>)}</select></label>
 }
 
-function BusinessesPage({ rows, totalCount, loading, error, onRetry, onOpenBusiness }: { rows: BusinessRow[]; totalCount: number; loading: boolean; error: boolean; onRetry: () => void; onOpenBusiness: (slug: string) => void }) {
+function PortfolioManagementPanel({ type, businesses, services, accessToken, onSaved }: { type: 'business' | 'service'; businesses: Business[]; services: Service[]; accessToken?: string; onSaved: () => void }) {
+  const [canManage, setCanManage] = useState(false)
+  const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [kind, setKind] = useState('business_unit')
+  const [ownerId, setOwnerId] = useState('')
+  const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({})
+  const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({})
+  const [savingId, setSavingId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!accessToken) { setCanManage(false); return }
+    const controller = new AbortController()
+    fetch('/api/portfolio/manage-access', { headers: { Authorization: `Bearer ${accessToken}` }, signal: controller.signal })
+      .then((response) => setCanManage(response.ok))
+      .catch((reason: unknown) => { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setCanManage(false) })
+    return () => controller.abort()
+  }, [accessToken])
+
+  const rows = type === 'business' ? businesses : services
+  useEffect(() => {
+    setNameDrafts(Object.fromEntries(rows.map((row) => [row.id, row.name])))
+    setStatusDrafts(Object.fromEntries(rows.map((row) => [row.id, row.status])))
+  }, [type, rows])
+
+  if (!canManage || !accessToken) return null
+  const createRecord = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (saving) return
+    setSaving(true); setError(''); setMessage('')
+    try {
+      const payload = type === 'business' ? { name, slug, kind } : { name, slug, owner_organization_id: ownerId }
+      const response = await fetch(`/api/portfolio/${type === 'business' ? 'businesses' : 'services'}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      })
+      const body = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(body.error ?? 'Portfolio record could not be created')
+      setName(''); setSlug(''); setOwnerId(''); setMessage(`${type === 'business' ? 'Business' : 'Service'} added to the group directory.`)
+      onSaved()
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Portfolio record could not be created') }
+    finally { setSaving(false) }
+  }
+  const updateRecord = async (id: string) => {
+    setSavingId(id); setError(''); setMessage('')
+    try {
+      const response = await fetch(`/api/portfolio/${type === 'business' ? 'businesses' : 'services'}/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameDrafts[id], status: statusDrafts[id] }),
+      })
+      const body = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(body.error ?? 'Portfolio record could not be updated')
+      setMessage('Portfolio record updated and recorded in the audit log.')
+      onSaved()
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Portfolio record could not be updated') }
+    finally { setSavingId('') }
+  }
+  const label = type === 'business' ? 'business' : 'service'
+  return <section className="content-panel portfolio-management">
+    <div className="panel-heading"><div><h2>Manage {type === 'business' ? 'businesses' : 'services'}</h2><p>Add records or update names and statuses. Every change is written to the audit log.</p></div><span className="panel-meta">GROUP ADMIN</span></div>
+    <form className="portfolio-create-form" onSubmit={createRecord}>
+      <label>{type === 'business' ? 'Business name' : 'Service name'}<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <label>Directory slug<input required maxLength={80} pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens." value={slug} onChange={(event) => setSlug(event.target.value)} /></label>
+      {type === 'business' ? <label>Business type<select value={kind} onChange={(event) => setKind(event.target.value)}><option value="business_unit">Business unit</option><option value="subsidiary">Subsidiary</option></select></label> : <label>Owning business<select required value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="">Choose a business</option>{businesses.filter((business) => business.status !== 'closed').map((business) => <option key={business.id} value={business.id}>{business.name}</option>)}</select></label>}
+      <div className="portfolio-create-submit"><button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Adding…' : `Add ${label}`}</button></div>
+    </form>
+    {message && <p className="portfolio-feedback" role="status">{message}</p>}
+    {error && <p className="portfolio-feedback portfolio-feedback-error" role="alert">{error}</p>}
+    <div className="table-scroll"><table className="data-table"><thead><tr><th>NAME</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>
+      {rows.map((row) => <tr key={row.id}><td><label className="visually-hidden" htmlFor={`${type}-name-${row.id}`}>{label} name</label><input id={`${type}-name-${row.id}`} className="portfolio-row-input" maxLength={120} value={nameDrafts[row.id] ?? row.name} onChange={(event) => setNameDrafts((current) => ({ ...current, [row.id]: event.target.value }))} /></td><td><label className="visually-hidden" htmlFor={`${type}-status-${row.id}`}>{label} status</label><select id={`${type}-status-${row.id}`} className="portfolio-row-select" value={statusDrafts[row.id] ?? row.status} onChange={(event) => setStatusDrafts((current) => ({ ...current, [row.id]: event.target.value }))}><option value="active">Active</option><option value="suspended">Suspended</option><option value="closed">Closed</option></select></td><td><button className="button button-secondary" type="button" disabled={savingId === row.id || !nameDrafts[row.id]?.trim()} onClick={() => void updateRecord(row.id)}>{savingId === row.id ? 'Saving…' : 'Save changes'}</button></td></tr>)}
+      {rows.length === 0 && <tr><td colSpan={3} className="empty-table">No records are available to manage.</td></tr>}
+    </tbody></table></div>
+  </section>
+}
+
+function BusinessesPage({ rows, totalCount, loading, error, onRetry, onOpenBusiness, accessToken, onPortfolioChanged }: { rows: BusinessRow[]; totalCount: number; loading: boolean; error: boolean; onRetry: () => void; onOpenBusiness: (slug: string) => void; accessToken?: string; onPortfolioChanged: () => void }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [sort, setSort] = useState<DirectorySort>({ key: 'name', direction: 'asc' })
   const [page, setPage] = useState(1)
@@ -484,11 +561,12 @@ function BusinessesPage({ rows, totalCount, loading, error, onRetry, onOpenBusin
 
   return <>
     <PageHeading eyebrow="PORTFOLIO" title="Businesses" description="Review the operating units connected to Drixel Labs Inc." />
+    <PortfolioManagementPanel type="business" businesses={rows} services={[]} accessToken={accessToken} onSaved={onPortfolioChanged} />
     <DirectoryNotice loading={loading} error={error} onRetry={onRetry} />
     <div className="content-panel">
       <div className="panel-heading directory-panel-heading">
         <div><h2>Registered businesses</h2><p>{sortedRows.length} matching · {totalCount} total in the group directory</p></div>
-        <span className="panel-meta">READ ONLY</span>
+        <span className="panel-meta">LIVE DIRECTORY</span>
       </div>
       <div className="directory-toolbar">
         {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1) }} /><CsvExportButton label="Export matching CSV" filename="drixel-businesses.csv" headers={['Business', 'Type', 'Services', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
@@ -512,13 +590,13 @@ function BusinessTable({ rows, compact = false, emptyMessage = 'No business unit
   )
 }
 
-function ServicesPage({ rows, totalCount, loading, error, onRetry, onOpenService, onOpenBusiness }: { rows: Service[]; totalCount: number; loading: boolean; error: boolean; onRetry: () => void; onOpenService: (slug: string) => void; onOpenBusiness: (slug: string) => void }) {
+function ServicesPage({ rows, totalCount, loading, error, onRetry, onOpenService, onOpenBusiness, accessToken, groupBusinesses, onPortfolioChanged }: { rows: Service[]; totalCount: number; loading: boolean; error: boolean; onRetry: () => void; onOpenService: (slug: string) => void; onOpenBusiness: (slug: string) => void; accessToken?: string; groupBusinesses: BusinessRow[]; onPortfolioChanged: () => void }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [businessFilter, setBusinessFilter] = useState('all')
   const [sort, setSort] = useState<DirectorySort>({ key: 'name', direction: 'asc' })
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  const businesses = [...new Set(rows.map((row) => row.owner_name))].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+  const businessNames = [...new Set(rows.map((row) => row.owner_name))].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
   const filteredRows = rows.filter((row) => (statusFilter === 'all' || row.status === statusFilter) && (businessFilter === 'all' || row.owner_name === businessFilter))
   const sortedRows = sortDirectoryRows(filteredRows, sort, (row, key) => key === 'owner' ? row.owner_name : key === 'status' ? row.status : row.name)
   const pageCount = Math.max(1, Math.ceil(sortedRows.length / pageSize))
@@ -529,14 +607,15 @@ function ServicesPage({ rows, totalCount, loading, error, onRetry, onOpenService
 
   return <>
     <PageHeading eyebrow="PORTFOLIO" title="Services" description="Review products and services owned by Drixel businesses." />
+    <PortfolioManagementPanel type="service" businesses={groupBusinesses} services={rows} accessToken={accessToken} onSaved={onPortfolioChanged} />
     <DirectoryNotice loading={loading} error={error} onRetry={onRetry} />
     <div className="content-panel">
       <div className="panel-heading directory-panel-heading">
         <div><h2>Registered services</h2><p>{sortedRows.length} matching · {totalCount} total in the group directory</p></div>
-        <span className="panel-meta">READ ONLY</span>
+        <span className="panel-meta">LIVE DIRECTORY</span>
       </div>
       <div className="directory-toolbar">
-        {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1) }} /><BusinessFilterControl value={businessFilter} businesses={businesses} onChange={(value) => { setBusinessFilter(value); setPage(1) }} /><CsvExportButton label="Export matching CSV" filename="drixel-services.csv" headers={['Service', 'Business', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
+      {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1) }} /><BusinessFilterControl value={businessFilter} businesses={businessNames} onChange={(value) => { setBusinessFilter(value); setPage(1) }} /><CsvExportButton label="Export matching CSV" filename="drixel-services.csv" headers={['Service', 'Business', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
       </div>
       <div className="table-scroll"><table className="data-table"><thead><tr><SortableHeader label="SERVICE" sortKey="name" sort={sort} onSort={toggleSort} /><SortableHeader label="BUSINESS" sortKey="owner" sort={sort} onSort={toggleSort} /><SortableHeader label="STATUS" sortKey="status" sort={sort} onSort={toggleSort} /></tr></thead><tbody>{pageRows.map((row) => <tr key={row.id}><td><a className="table-primary table-record-link" href={`/services/${encodeURIComponent(row.slug)}`} onClick={(event) => followSectionLink(event, () => onOpenService(row.slug))}>{row.name}</a></td><td><a className="table-record-link" href={`/businesses/${encodeURIComponent(row.owner_slug)}`} onClick={(event) => followSectionLink(event, () => onOpenBusiness(row.owner_slug))}>{row.owner_name}</a></td><td><span className="status-tag">{statusLabel(row.status)}</span></td></tr>)}{pageRows.length === 0 && <tr><td className="empty-table" colSpan={3}>{sortedRows.length === 0 ? (businessFilter !== 'all' ? `No ${statusFilter === 'all' ? '' : `${statusFilter} `}services for ${businessFilter}.` : statusFilter === 'all' ? 'No services match the current search.' : `No ${statusFilter} services match the current search.`) : 'No services on this page.'}</td></tr>}</tbody></table></div>
       <DirectoryPagination total={sortedRows.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1) }} />

@@ -160,6 +160,30 @@ function auditQuery() {
   `
 }
 
+function portfolioAdministratorQuery() {
+  return `
+    SELECT actor.id AS actor_id, group_org.id AS group_id
+    FROM drixel.accounts AS actor
+    JOIN drixel.account_identities AS identity ON identity.account_id = actor.id
+    JOIN drixel.organizations AS group_org ON group_org.slug = 'drixel-labs' AND group_org.kind = 'group'
+    WHERE identity.issuer = $1 AND identity.subject = $2 AND actor.status = 'active'
+      AND EXISTS (
+        SELECT 1 FROM drixel.role_assignments AS assignment
+        JOIN drixel.roles AS role ON role.id = assignment.role_id
+        JOIN drixel.organization_memberships AS membership
+          ON membership.account_id = actor.id AND membership.organization_id = group_org.id AND membership.status = 'active'
+        WHERE assignment.account_id = actor.id AND assignment.scope = 'group'
+          AND assignment.organization_id = group_org.id AND role.code IN ('group_owner', 'group_admin')
+          AND (assignment.expires_at IS NULL OR assignment.expires_at > now())
+      )
+  `
+}
+
+const validSlug = (value) => typeof value === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)
+const validRecordName = (value) => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 120
+const validRecordStatus = (value) => ['active', 'suspended', 'closed'].includes(value)
+const isUniqueViolation = (error) => error?.code === '23505'
+
 export function createApiServer(query, options = {}) {
   const managementQuery = options.managementQuery ?? query
   const transaction = options.transaction
@@ -215,6 +239,108 @@ export function createApiServer(query, options = {}) {
         })
       } catch {
         return sendJson(response, 503, { error: 'Portfolio directory is unavailable' })
+      }
+    }
+
+    if (pathname === '/api/portfolio/manage-access' && request.method === 'GET') {
+      let claims
+      try { claims = await authenticate(request) }
+      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      try {
+        const result = await managementQuery(portfolioAdministratorQuery(), [claims.iss, claims.sub])
+        if (!result.rows[0]) return sendJson(response, 403, { error: 'Group administrator access is required' })
+        return sendJson(response, 200, { can_manage_portfolio: true })
+      } catch {
+        return sendJson(response, 503, { error: 'Portfolio permissions are unavailable' })
+      }
+    }
+
+    const businessRecord = pathname.match(/^\/api\/portfolio\/businesses\/([0-9a-f-]{36})$/i)
+    const serviceRecord = pathname.match(/^\/api\/portfolio\/services\/([0-9a-f-]{36})$/i)
+    const businessCollection = pathname === '/api/portfolio/businesses'
+    const serviceCollection = pathname === '/api/portfolio/services'
+    if ((businessCollection && request.method === 'POST') || (serviceCollection && request.method === 'POST')
+      || (businessRecord && request.method === 'PATCH') || (serviceRecord && request.method === 'PATCH')) {
+      let claims
+      try { claims = await authenticate(request) }
+      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      let body
+      try { body = await readJson(request) }
+      catch (error) { return sendJson(response, 400, { error: error.message }) }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(response, 400, { error: 'Invalid portfolio details' })
+      const isBusiness = businessCollection || businessRecord
+      const isCreate = businessCollection || serviceCollection
+      const name = typeof body.name === 'string' ? body.name.trim() : ''
+      const status = body.status
+      const slug = body.slug
+      const kind = body.kind
+      const ownerId = body.owner_organization_id
+      if (!validRecordName(name) || (isCreate && !validSlug(slug))
+        || (isCreate && isBusiness && !['business_unit', 'subsidiary'].includes(kind))
+        || (isCreate && !isBusiness && (typeof ownerId !== 'string' || !/^[0-9a-f-]{36}$/i.test(ownerId)))
+        || (!isCreate && !validRecordStatus(status))) {
+        return sendJson(response, 400, { error: 'Provide a valid name, slug, business type or owner, and status' })
+      }
+      try {
+        const result = await runTransaction(async (tx) => {
+          const administrator = await tx(portfolioAdministratorQuery(), [claims.iss, claims.sub])
+          const actor = administrator.rows[0]
+          if (!actor) return { forbidden: true }
+          let saved
+          if (isCreate && isBusiness) {
+            saved = await tx(`
+              INSERT INTO drixel.organizations (parent_organization_id, kind, slug, display_name)
+              VALUES ($1, $2::drixel.organization_kind, $3, $4)
+              RETURNING id, slug, display_name AS name, kind, status
+            `, [actor.group_id, kind, slug, name])
+          } else if (isCreate) {
+            saved = await tx(`
+              INSERT INTO drixel.applications (owner_organization_id, slug, display_name)
+              SELECT organization.id, $3, $4
+              FROM drixel.organizations AS organization
+              WHERE organization.id = $1 AND organization.parent_organization_id = $2
+                AND organization.kind IN ('business_unit', 'subsidiary') AND organization.status <> 'closed'
+              RETURNING id, slug, display_name AS name, status, owner_organization_id
+            `, [ownerId, actor.group_id, slug, name])
+          } else if (isBusiness) {
+            saved = await tx(`
+              UPDATE drixel.organizations
+              SET display_name = $3, status = $4::drixel.record_status, updated_at = now()
+              WHERE id = $1 AND parent_organization_id = $2
+                AND kind IN ('business_unit', 'subsidiary')
+              RETURNING id, slug, display_name AS name, kind, status
+            `, [businessRecord[1], actor.group_id, name, status])
+          } else {
+            saved = await tx(`
+              UPDATE drixel.applications AS application
+              SET display_name = $3, status = $4::drixel.record_status, updated_at = now()
+              FROM drixel.organizations AS owner
+              WHERE application.id = $1 AND application.owner_organization_id = owner.id
+                AND owner.parent_organization_id = $2 AND owner.kind IN ('business_unit', 'subsidiary')
+              RETURNING application.id, application.slug, application.display_name AS name,
+                        application.status, application.owner_organization_id
+            `, [serviceRecord[1], actor.group_id, name, status])
+          }
+          if (!saved.rows[0]) return { notFound: true }
+          const record = saved.rows[0]
+          const eventOrganizationId = isBusiness
+            ? record.id
+            : (isCreate ? ownerId : record.owner_organization_id)
+          await tx(`
+            INSERT INTO drixel.audit_events
+              (actor_account_id, organization_id, application_id, action, target_type, target_id, details)
+            VALUES ($1, $2, $3, $4, $5, $6, jsonb_build_object('name', $7, 'status', $8, 'slug', $9))
+          `, [actor.actor_id, eventOrganizationId, isBusiness ? null : record.id,
+            `${isBusiness ? 'business' : 'service'}.${isCreate ? 'created' : 'updated'}`,
+            isBusiness ? 'organization' : 'application', record.id, record.name, record.status, record.slug])
+          return { record }
+        })
+        if (result.forbidden) return sendJson(response, 403, { error: 'Group administrator access is required' })
+        if (result.notFound) return sendJson(response, 404, { error: 'The portfolio record or owning business was not found' })
+        return sendJson(response, isCreate ? 201 : 200, { record: result.record })
+      } catch (error) {
+        if (isUniqueViolation(error)) return sendJson(response, 409, { error: 'That portfolio slug is already in use' })
+        return sendJson(response, 503, { error: 'Portfolio record could not be saved' })
       }
     }
 

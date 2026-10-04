@@ -37,6 +37,7 @@ services:
     volumes:
       - ./db/migrations/002_directory_reader.sql:/opt/drixel/002_directory_reader.sql:ro
       - ./db/migrations/003_identity_management.sql:/opt/drixel/003_identity_management.sql:ro
+      - ./db/migrations/004_portfolio_management.sql:/opt/drixel/004_portfolio_management.sql:ro
       - ./db/init/04_bootstrap_owner.sql:/opt/drixel/004_bootstrap_owner.sql:ro
       - ./db/init/03_directory_reader_login.sh:/opt/drixel/03_directory_reader_login.sh:ro
     entrypoint: ["/bin/sh", "/opt/drixel/03_directory_reader_login.sh"]
