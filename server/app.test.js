@@ -52,6 +52,73 @@ test('API rejects write methods', async () => {
   assert.equal(response.headers.get('allow'), 'GET')
 })
 
+test('portfolio changes require an authenticated group administrator', async () => {
+  const response = await fetch(`${origin}/api/portfolio/businesses`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'New Business', slug: 'new-business', kind: 'business_unit' }),
+  })
+  assert.equal(response.status, 401)
+  assert.deepEqual(await response.json(), { error: 'Authentication required' })
+})
+
+test('portfolio records cannot be edited by an authenticated non-administrator', async () => {
+  const protectedServer = createApiServer(async () => ({ rows: [] }), {
+    verifyToken: async () => ({ iss: 'https://id.example', sub: 'employee-subject' }),
+    transaction: async (operation) => operation(async (sql) => sql.includes('JOIN drixel.account_identities') ? { rows: [] } : { rows: [] }),
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const response = await fetch(`${protectedOrigin}/api/portfolio/businesses`, {
+      method: 'POST', headers: { authorization: 'Bearer valid', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'New Business', slug: 'new-business', kind: 'business_unit' }),
+    })
+    assert.equal(response.status, 403)
+    assert.deepEqual(await response.json(), { error: 'Group administrator access is required' })
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test('group administrator can add a business and each change is audited', async () => {
+  const statements = []
+  const groupId = '11111111-1111-1111-1111-111111111111'
+  const execute = async (sql, values = []) => {
+    statements.push({ sql, values })
+    if (sql.includes('JOIN drixel.account_identities')) return { rows: [{ actor_id: 'owner-id', group_id: groupId }] }
+    if (sql.includes('INSERT INTO drixel.organizations')) return { rows: [{ id: 'new-business-id', slug: 'new-business', name: 'New Business', kind: 'business_unit', status: 'active' }] }
+    if (sql.includes('UPDATE drixel.applications')) return { rows: [{ id: 'service-id', slug: 'new-service', name: 'New Service', status: 'suspended', owner_organization_id: 'business-id' }] }
+    return { rows: [], rowCount: 1 }
+  }
+  const protectedServer = createApiServer(async () => ({ rows: [] }), {
+    verifyToken: async () => ({ iss: 'https://id.example', sub: 'owner-subject' }),
+    transaction: async (operation) => operation(execute),
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const create = await fetch(`${protectedOrigin}/api/portfolio/businesses`, {
+      method: 'POST', headers: { authorization: 'Bearer valid', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'New Business', slug: 'new-business', kind: 'business_unit' }),
+    })
+    assert.equal(create.status, 201)
+    assert.equal((await create.json()).record.slug, 'new-business')
+
+    const update = await fetch(`${protectedOrigin}/api/portfolio/services/22222222-2222-2222-2222-222222222222`, {
+      method: 'PATCH', headers: { authorization: 'Bearer valid', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'New Service', status: 'suspended' }),
+    })
+    assert.equal(update.status, 200)
+    assert.equal((await update.json()).record.status, 'suspended')
+    assert.equal(statements.filter(({ sql }) => sql.includes('INSERT INTO drixel.audit_events')).length, 2)
+    assert.ok(statements.some(({ sql, values }) => sql.includes('INSERT INTO drixel.audit_events') && values[3] === 'business.created'))
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
 test('account administration requires a configured bearer identity', async () => {
   const response = await fetch(`${origin}/api/accounts`)
   assert.equal(response.status, 401)

@@ -1,6 +1,6 @@
 # Drixel Platform foundation
 
-This repository provides a shared organization and account directory for Drixel Labs Inc. It includes a PostgreSQL foundation for group businesses, services, global accounts, scoped memberships, role assignments, consent records, and audit events. The console reads the portfolio through a read-only API and provides OIDC-protected account administration.
+This repository provides a shared organization and account directory for Drixel Labs Inc. It includes a PostgreSQL foundation for group businesses, services, global accounts, scoped memberships, role assignments, consent records, and audit events. The console reads the portfolio through a restricted read API and provides OIDC-protected portfolio and account administration.
 
 ## Initial portfolio
 
@@ -29,7 +29,7 @@ The compose setup requires Docker Desktop or Docker Engine with the Compose plug
 3. Start the API and database with `docker compose up --build -d`.
 4. Run `npm run dev` and open the local URL printed by Vite. Vite forwards `/api` requests to the API on port 3000.
 
-The console uses a restrained white, charcoal, and gray interface. Each screen has its own direct URL: `/overview`, `/businesses`, `/services`, `/accounts`, `/access-roles`, `/audit-log`, and `/settings`. Individual directory records have shareable detail routes at `/businesses/:slug` and `/services/:slug`; related business and service links connect those records. Navigation supports direct links, browser back/forward, and mobile navigation. Business and service pages use live directory responses, sortable columns, status filters, service owner filters, pagination, and CSV export of all matching loaded records. When the API is unavailable, the interface reports that state rather than showing hard-coded records. The account page supports OIDC sign-in, business-scoped account listing, business and service invitations, and invitation acceptance. Invitation and acceptance actions write audit events. Business/service editing and arbitrary role changes are not implemented yet.
+The console uses a restrained white, charcoal, and gray interface. Each screen has its own direct URL: `/overview`, `/businesses`, `/services`, `/accounts`, `/access-roles`, `/audit-log`, and `/settings`. Individual directory records have shareable detail routes at `/businesses/:slug` and `/services/:slug`; related business and service links connect those records. Navigation supports direct links, browser back/forward, and mobile navigation. Business and service pages use live directory responses, sortable columns, status filters, service owner filters, pagination, and CSV export of all matching loaded records. Group administrators can add businesses and services, and update names or statuses; each change is audit logged. When the API is unavailable, the interface reports that state rather than showing hard-coded records. The account page supports OIDC sign-in, business-scoped account listing, business and service invitations, and invitation acceptance. Invitation and acceptance actions write audit events. Editing arbitrary access roles is not implemented yet.
 
 ## Configure OIDC sign-in
 
@@ -45,6 +45,7 @@ The SPA keeps access and ID tokens in memory. Each invitation link contains a ra
 - The portfolio API uses the dedicated `drixel_directory_reader` PostgreSQL role. It can only select group, business-unit, subsidiary, and their service records.
 - Row-level security hides customer organizations and their applications from this API role. Account, membership, role-assignment, consent, and audit tables are not granted to it.
 - Account administration uses a separate `drixel_management_api` login available only to the server. The API checks the verified issuer and subject, then authorizes account and audit queries against active group or business administrator roles.
+- Business and service directory writes require an active group owner or group administrator assignment and membership. The API limits changes to direct children of Drixel Labs Inc, does not permit deletion, and writes a scoped audit event for each create or update.
 - The API accepts writes only for business or service-scoped invitations and invitation acceptance. Roles are activated only after the invited identity is verified. Business administrators can grant employee/manager and service roles within their business; group administrators can invite across group businesses.
 - Invitation acceptance requires a verified ID token whose issuer and subject match the API access token. Existing identities are linked by issuer and subject, never by matching email alone.
 - `GET /api/accounts`, `GET /api/audit-log`, `POST /api/invitations`, and `POST /api/invitations/accept` require OIDC bearer tokens. Account and audit responses are limited to the actor's active group/business scopes.
@@ -64,10 +65,10 @@ Run `npm run test:api` for API route and failure-mode tests, and `npm run build`
 - `application_memberships` records access to a service; `role_assignments` scopes permissions to the group, a business, a service, or customer workspace.
 - `consents` and `audit_events` capture user choices and high-value administrative actions.
 
-The migration enables PostgreSQL row-level security on the account and organization tables. A dedicated reader policy exposes only group and business portfolio records to the read-only directory API; account and customer-workspace data remain unavailable to that role. The management API uses a separate service credential, and its routes enforce membership and role scope after OIDC token validation. Application services must repeat those authorization checks for their own data; do not connect end-user clients directly to the database or use the migration owner as a runtime account.
+The migration enables PostgreSQL row-level security on the account and organization tables. A dedicated reader policy exposes only group and business portfolio records to the directory API; account and customer-workspace data remain unavailable to that role. The management API uses a separate service credential, and its routes enforce membership and role scope after OIDC token validation. Application services must repeat those authorization checks for their own data; do not connect end-user clients directly to the database or use the migration owner as a runtime account.
 
 ## Remaining implementation work
 
-Configure the OIDC provider and bootstrap the initial group owner. Then add business/service editing and scoped role changes, and integrate one service at a time. Existing identities must link by the provider's stable issuer and subject, not by email text alone.
+Configure the OIDC provider and bootstrap the initial group owner. Then implement scoped role changes and integrate one service at a time. Existing identities must link by the provider's stable issuer and subject, not by email text alone.
 
 See [Drixel_Group_and_Account_Architecture.md](Drixel_Group_and_Account_Architecture.md) for the operating model and rollout decisions.
