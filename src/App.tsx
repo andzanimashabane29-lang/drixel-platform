@@ -307,6 +307,29 @@ function DirectoryNotice({ loading, error, onRetry }: { loading: boolean; error:
 }
 
 type StatusFilter = 'all' | 'active' | 'suspended' | 'closed'
+type SortDirection = 'asc' | 'desc'
+type DirectorySort = { key: string; direction: SortDirection }
+
+function sortDirectoryRows<T>(rows: T[], sort: DirectorySort, valueFor: (row: T, key: string) => string) {
+  const multiplier = sort.direction === 'asc' ? 1 : -1
+  return [...rows].sort((left, right) => valueFor(left, sort.key).localeCompare(valueFor(right, sort.key), undefined, { numeric: true, sensitivity: 'base' }) * multiplier)
+}
+
+function SortableHeader({ label, sortKey, sort, onSort }: { label: string; sortKey: string; sort: DirectorySort; onSort: (key: string) => void }) {
+  const active = sort.key === sortKey
+  return <th aria-sort={active ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button className="sort-button" type="button" onClick={() => onSort(sortKey)} aria-label={`Sort by ${label}${active ? `, ${sort.direction === 'asc' ? 'ascending' : 'descending'}` : ''}`}>{label}<span aria-hidden="true">{active ? (sort.direction === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span></button></th>
+}
+
+function DirectoryPagination({ total, page, pageSize, onPageChange, onPageSizeChange }: { total: number; page: number; pageSize: number; onPageChange: (page: number) => void; onPageSizeChange: (pageSize: number) => void }) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const first = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const last = Math.min(page * pageSize, total)
+  return <div className="directory-pagination">
+    <p>Showing <strong>{first}–{last}</strong> of <strong>{total}</strong></p>
+    <label className="page-size-control"><span>Rows per page</span><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option></select></label>
+    <div className="pagination-actions"><button className="button button-secondary" type="button" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>Previous</button><span>Page {page} of {pageCount}</span><button className="button button-secondary" type="button" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount}>Next</button></div>
+  </div>
+}
 
 function CsvExportButton({ label, filename, headers, rows }: { label: string; filename: string; headers: string[]; rows: string[][] }) {
   const exportCsv = () => {
@@ -343,32 +366,46 @@ function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChang
   )
 }
 
+function BusinessFilterControl({ value, businesses, onChange }: { value: string; businesses: string[]; onChange: (value: string) => void }) {
+  return <label className="status-filter"><span>Business</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="all">All businesses</option>{businesses.map((business) => <option key={business} value={business}>{business}</option>)}</select></label>
+}
+
 function BusinessesPage({ rows, totalCount, loading, error, onRetry, onOpenBusiness }: { rows: BusinessRow[]; totalCount: number; loading: boolean; error: boolean; onRetry: () => void; onOpenBusiness: (slug: string) => void }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const visibleRows = statusFilter === 'all' ? rows : rows.filter((row) => row.status === statusFilter)
-  const exportRows = visibleRows.map((row) => [row.name, row.category, row.services, statusLabel(row.status)])
+  const [sort, setSort] = useState<DirectorySort>({ key: 'name', direction: 'asc' })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const filteredRows = statusFilter === 'all' ? rows : rows.filter((row) => row.status === statusFilter)
+  const sortedRows = sortDirectoryRows(filteredRows, sort, (row, key) => key === 'category' ? row.category : key === 'services' ? row.services : key === 'status' ? row.status : row.name)
+  const pageCount = Math.max(1, Math.ceil(sortedRows.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const pageRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const exportRows = sortedRows.map((row) => [row.name, row.category, row.services, statusLabel(row.status)])
+  const toggleSort = (key: string) => { setSort((current) => ({ key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' })); setPage(1) }
 
   return <>
     <PageHeading eyebrow="PORTFOLIO" title="Businesses" description="Review the operating units connected to Drixel Labs Inc." />
     <DirectoryNotice loading={loading} error={error} onRetry={onRetry} />
     <div className="content-panel">
       <div className="panel-heading directory-panel-heading">
-        <div><h2>Registered businesses</h2><p>{visibleRows.length} shown · {totalCount} total in the group directory</p></div>
+        <div><h2>Registered businesses</h2><p>{sortedRows.length} matching · {totalCount} total in the group directory</p></div>
         <span className="panel-meta">READ ONLY</span>
       </div>
       <div className="directory-toolbar">
-        {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={setStatusFilter} /><CsvExportButton label="Export CSV" filename="drixel-businesses.csv" headers={['Business', 'Type', 'Services', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
+        {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1) }} /><CsvExportButton label="Export matching CSV" filename="drixel-businesses.csv" headers={['Business', 'Type', 'Services', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
       </div>
-      <BusinessTable rows={visibleRows} onOpenBusiness={onOpenBusiness} emptyMessage={statusFilter === 'all' ? 'No businesses match the current search.' : `No ${statusFilter} businesses match the current search.`} />
+      <BusinessTable rows={pageRows} onOpenBusiness={onOpenBusiness} onSort={toggleSort} sort={sort} emptyMessage={statusFilter === 'all' ? 'No businesses match the current search.' : `No ${statusFilter} businesses match the current search.`} />
+      <DirectoryPagination total={sortedRows.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1) }} />
     </div>
     <footer className="page-footer">Business records are read from the PostgreSQL group directory. Editing requires the authenticated management API.</footer>
   </>
 }
 
-function BusinessTable({ rows, compact = false, emptyMessage = 'No business units are available.', onOpenBusiness }: { rows: BusinessRow[]; compact?: boolean; emptyMessage?: string; onOpenBusiness?: (slug: string) => void }) {
+function BusinessTable({ rows, compact = false, emptyMessage = 'No business units are available.', onOpenBusiness, onSort, sort }: { rows: BusinessRow[]; compact?: boolean; emptyMessage?: string; onOpenBusiness?: (slug: string) => void; onSort?: (key: string) => void; sort?: DirectorySort }) {
+  const headers = onSort && sort ? <tr><SortableHeader label="BUSINESS" sortKey="name" sort={sort} onSort={onSort} /><SortableHeader label="TYPE" sortKey="category" sort={sort} onSort={onSort} /><SortableHeader label="SERVICES" sortKey="services" sort={sort} onSort={onSort} /><SortableHeader label="STATUS" sortKey="status" sort={sort} onSort={onSort} /></tr> : <tr><th scope="col">BUSINESS</th><th scope="col">TYPE</th><th scope="col">SERVICES</th><th scope="col">STATUS</th></tr>
   return (
     <div className={`table-scroll ${compact ? 'table-scroll-compact' : ''}`}>
-      <table className="data-table"><thead><tr><th>BUSINESS</th><th>TYPE</th><th>SERVICES</th><th>STATUS</th></tr></thead>
+      <table className="data-table"><thead>{headers}</thead>
         <tbody>{rows.map((row) => <tr key={row.id}><td><a className="table-primary table-record-link" href={`/businesses/${encodeURIComponent(row.slug)}`} onClick={(event) => onOpenBusiness && followSectionLink(event, () => onOpenBusiness(row.slug))}>{row.name}</a></td><td>{row.category}</td><td>{row.services}</td><td><span className="status-tag">{statusLabel(row.status)}</span></td></tr>)}
         {rows.length === 0 && <tr><td className="empty-table" colSpan={4}>{emptyMessage}</td></tr>}</tbody>
       </table>
@@ -378,21 +415,32 @@ function BusinessTable({ rows, compact = false, emptyMessage = 'No business unit
 
 function ServicesPage({ rows, totalCount, loading, error, onRetry, onOpenService, onOpenBusiness }: { rows: Service[]; totalCount: number; loading: boolean; error: boolean; onRetry: () => void; onOpenService: (slug: string) => void; onOpenBusiness: (slug: string) => void }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const visibleRows = statusFilter === 'all' ? rows : rows.filter((row) => row.status === statusFilter)
-  const exportRows = visibleRows.map((row) => [row.name, row.owner_name, statusLabel(row.status)])
+  const [businessFilter, setBusinessFilter] = useState('all')
+  const [sort, setSort] = useState<DirectorySort>({ key: 'name', direction: 'asc' })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const businesses = [...new Set(rows.map((row) => row.owner_name))].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+  const filteredRows = rows.filter((row) => (statusFilter === 'all' || row.status === statusFilter) && (businessFilter === 'all' || row.owner_name === businessFilter))
+  const sortedRows = sortDirectoryRows(filteredRows, sort, (row, key) => key === 'owner' ? row.owner_name : key === 'status' ? row.status : row.name)
+  const pageCount = Math.max(1, Math.ceil(sortedRows.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const pageRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const exportRows = sortedRows.map((row) => [row.name, row.owner_name, statusLabel(row.status)])
+  const toggleSort = (key: string) => { setSort((current) => ({ key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' })); setPage(1) }
 
   return <>
     <PageHeading eyebrow="PORTFOLIO" title="Services" description="Review products and services owned by Drixel businesses." />
     <DirectoryNotice loading={loading} error={error} onRetry={onRetry} />
     <div className="content-panel">
       <div className="panel-heading directory-panel-heading">
-        <div><h2>Registered services</h2><p>{visibleRows.length} shown · {totalCount} total in the group directory</p></div>
+        <div><h2>Registered services</h2><p>{sortedRows.length} matching · {totalCount} total in the group directory</p></div>
         <span className="panel-meta">READ ONLY</span>
       </div>
       <div className="directory-toolbar">
-        {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={setStatusFilter} /><CsvExportButton label="Export CSV" filename="drixel-services.csv" headers={['Service', 'Business', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
+        {!loading && !error ? <><StatusFilterControl value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1) }} /><BusinessFilterControl value={businessFilter} businesses={businesses} onChange={(value) => { setBusinessFilter(value); setPage(1) }} /><CsvExportButton label="Export matching CSV" filename="drixel-services.csv" headers={['Service', 'Business', 'Status']} rows={exportRows} /></> : <span className="directory-toolbar-note">Filters and export are available when the directory is connected.</span>}
       </div>
-      <div className="table-scroll"><table className="data-table"><thead><tr><th>SERVICE</th><th>BUSINESS</th><th>STATUS</th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id}><td><a className="table-primary table-record-link" href={`/services/${encodeURIComponent(row.slug)}`} onClick={(event) => followSectionLink(event, () => onOpenService(row.slug))}>{row.name}</a></td><td><a className="table-record-link" href={`/businesses/${encodeURIComponent(row.owner_slug)}`} onClick={(event) => followSectionLink(event, () => onOpenBusiness(row.owner_slug))}>{row.owner_name}</a></td><td><span className="status-tag">{statusLabel(row.status)}</span></td></tr>)}{visibleRows.length === 0 && <tr><td className="empty-table" colSpan={3}>{statusFilter === 'all' ? 'No services match the current search.' : `No ${statusFilter} services match the current search.`}</td></tr>}</tbody></table></div>
+      <div className="table-scroll"><table className="data-table"><thead><tr><SortableHeader label="SERVICE" sortKey="name" sort={sort} onSort={toggleSort} /><SortableHeader label="BUSINESS" sortKey="owner" sort={sort} onSort={toggleSort} /><SortableHeader label="STATUS" sortKey="status" sort={sort} onSort={toggleSort} /></tr></thead><tbody>{pageRows.map((row) => <tr key={row.id}><td><a className="table-primary table-record-link" href={`/services/${encodeURIComponent(row.slug)}`} onClick={(event) => followSectionLink(event, () => onOpenService(row.slug))}>{row.name}</a></td><td><a className="table-record-link" href={`/businesses/${encodeURIComponent(row.owner_slug)}`} onClick={(event) => followSectionLink(event, () => onOpenBusiness(row.owner_slug))}>{row.owner_name}</a></td><td><span className="status-tag">{statusLabel(row.status)}</span></td></tr>)}{pageRows.length === 0 && <tr><td className="empty-table" colSpan={3}>{sortedRows.length === 0 ? (businessFilter !== 'all' ? `No ${statusFilter === 'all' ? '' : `${statusFilter} `}services for ${businessFilter}.` : statusFilter === 'all' ? 'No services match the current search.' : `No ${statusFilter} services match the current search.`) : 'No services on this page.'}</td></tr>}</tbody></table></div>
+      <DirectoryPagination total={sortedRows.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1) }} />
     </div>
     <footer className="page-footer">Each service has one owning business and its own data boundary. Registration requires the authenticated management API.</footer>
   </>
