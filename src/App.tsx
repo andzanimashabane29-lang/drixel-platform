@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 
 type Section = 'Overview' | 'Businesses' | 'Services' | 'Accounts' | 'Access roles' | 'Audit log' | 'Settings'
 
@@ -6,7 +6,7 @@ type Business = { id: string; slug: string; name: string; kind: string; status: 
 type Service = { id: string; slug: string; name: string; status: string; owner_slug: string; owner_name: string }
 type Portfolio = { businesses: Business[]; services: Service[] }
 type BusinessRow = Business & { category: string; services: string }
-type AppRoute = { section: Section; slug?: string }
+type AppRoute = { section: Section; slug?: string; acceptToken?: string }
 
 const emptyPortfolio: Portfolio = { businesses: [], services: [] }
 
@@ -29,7 +29,61 @@ function routeFromPath(pathname: string): AppRoute {
 
   const recordMatch = pathname.match(/^\/(businesses|services)\/([a-z0-9]+(?:-[a-z0-9]+)*)$/)
   if (recordMatch) return { section: recordMatch[1] === 'businesses' ? 'Businesses' : 'Services', slug: recordMatch[2] }
+  if (pathname === '/auth/callback') return { section: 'Accounts' }
+  if (pathname === '/accept-invitation') return { section: 'Accounts', acceptToken: decodeURIComponent(window.location.hash.slice(1)) }
   return { section: 'Overview' }
+}
+
+const oidcConfig = {
+  issuer: import.meta.env.VITE_OIDC_ISSUER as string | undefined,
+  authorizationEndpoint: import.meta.env.VITE_OIDC_AUTHORIZATION_ENDPOINT as string | undefined,
+  tokenEndpoint: import.meta.env.VITE_OIDC_TOKEN_ENDPOINT as string | undefined,
+  clientId: import.meta.env.VITE_OIDC_CLIENT_ID as string | undefined,
+  audience: import.meta.env.VITE_OIDC_AUDIENCE as string | undefined,
+}
+const oidcConfigured = Boolean(oidcConfig.issuer && oidcConfig.audience && oidcConfig.authorizationEndpoint && oidcConfig.tokenEndpoint && oidcConfig.clientId)
+const oidcRedirectUri = `${window.location.origin}/auth/callback`
+
+function base64Url(bytes: Uint8Array) {
+  let binary = ''
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte) })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function randomToken(size = 32) {
+  const bytes = new Uint8Array(size)
+  window.crypto.getRandomValues(bytes)
+  return base64Url(bytes)
+}
+
+function readJwtPayload(token: string) {
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(part.padEnd(Math.ceil(part.length / 4) * 4, '='))) as Record<string, unknown>
+  }
+  catch { throw new Error('Identity provider returned an invalid ID token') }
+}
+
+async function beginOidcLogin() {
+  if (!oidcConfigured || !window.isSecureContext) return false
+  const state = randomToken()
+  const nonce = randomToken()
+  const verifier = randomToken(48)
+  const challenge = base64Url(new Uint8Array(await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))))
+  const returnTo = `${window.location.pathname}${window.location.hash}`
+  sessionStorage.setItem('drixel-oidc-transaction', JSON.stringify({ state, nonce, verifier, returnTo }))
+  const authorization = new URL(oidcConfig.authorizationEndpoint!)
+  authorization.searchParams.set('client_id', oidcConfig.clientId!)
+  authorization.searchParams.set('response_type', 'code')
+  authorization.searchParams.set('redirect_uri', oidcRedirectUri)
+  authorization.searchParams.set('scope', 'openid profile email')
+  authorization.searchParams.set('state', state)
+  authorization.searchParams.set('nonce', nonce)
+  authorization.searchParams.set('code_challenge', challenge)
+  authorization.searchParams.set('code_challenge_method', 'S256')
+  if (oidcConfig.audience) authorization.searchParams.set('audience', oidcConfig.audience)
+  window.location.assign(authorization.toString())
+  return true
 }
 
 function followSectionLink(event: ReactMouseEvent<HTMLAnchorElement>, navigate: () => void) {
@@ -43,11 +97,65 @@ function App() {
   const section = route.section
   const [query, setQuery] = useState('')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [accessToken, setAccessToken] = useState<string>()
+  const [idToken, setIdToken] = useState<string>()
+  const [authError, setAuthError] = useState('')
   const [portfolio, setPortfolio] = useState<Portfolio>(emptyPortfolio)
   const [directoryLoading, setDirectoryLoading] = useState(true)
   const [directoryError, setDirectoryError] = useState(false)
   const [directoryRefresh, setDirectoryRefresh] = useState(0)
+
+  useEffect(() => {
+    if (window.location.pathname !== '/auth/callback') return
+    const finishLogin = async () => {
+      const transactionText = sessionStorage.getItem('drixel-oidc-transaction')
+      sessionStorage.removeItem('drixel-oidc-transaction')
+      let transaction: { state: string; nonce: string; verifier: string; returnTo: string } | undefined
+      try { transaction = transactionText ? JSON.parse(transactionText) as { state: string; nonce: string; verifier: string; returnTo: string } : undefined }
+      catch { transaction = undefined }
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get('code')
+      if (!transaction || !code || !params.get('state') || params.get('state') !== transaction.state) {
+        setAuthError('Sign-in could not be verified. Start again from the sign-in button.')
+        window.history.replaceState(null, '', '/accounts')
+        setRoute({ section: 'Accounts' })
+        return
+      }
+      try {
+        const tokenResponse = await fetch(oidcConfig.tokenEndpoint!, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: oidcConfig.clientId!,
+            code,
+            redirect_uri: oidcRedirectUri,
+            code_verifier: transaction.verifier,
+          }),
+          credentials: 'omit',
+        })
+        const tokens = await tokenResponse.json() as { access_token?: string; id_token?: string }
+        if (!tokenResponse.ok || !tokens.access_token || !tokens.id_token) throw new Error('Token exchange failed')
+        const idClaims = readJwtPayload(tokens.id_token)
+        const idAudiences = Array.isArray(idClaims.aud) ? idClaims.aud : [idClaims.aud]
+        if (idClaims.iss !== oidcConfig.issuer || !idAudiences.includes(oidcConfig.clientId) || idClaims.nonce !== transaction.nonce) {
+          throw new Error('ID token verification failed')
+        }
+        setAccessToken(tokens.access_token)
+        setIdToken(tokens.id_token)
+        setAuthError('')
+        const returnTo = transaction.returnTo || '/accounts'
+        window.history.replaceState(null, '', returnTo)
+        const nextRoute = routeFromPath(window.location.pathname)
+        setRoute({ ...nextRoute, acceptToken: window.location.pathname === '/accept-invitation' ? decodeURIComponent(window.location.hash.slice(1)) : undefined })
+      } catch {
+        setAuthError('Sign-in failed. Check the OIDC client, redirect URI, token endpoint, and browser CORS settings.')
+        window.history.replaceState(null, '', '/accounts')
+        setRoute({ section: 'Accounts' })
+      }
+    }
+    void finishLogin()
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -78,25 +186,19 @@ function App() {
   useEffect(() => {
     const initialRoute = routeFromPath(window.location.pathname)
     const knownPath = sections.some((knownSection) => sectionPaths[knownSection] === window.location.pathname)
-      || Boolean(initialRoute.slug)
+      || Boolean(initialRoute.slug) || window.location.pathname === '/accept-invitation'
     if (!knownPath) window.history.replaceState(null, '', sectionPaths.Overview)
     const handlePopState = () => {
       setRoute(routeFromPath(window.location.pathname))
       setQuery('')
       setMobileNavOpen(false)
-      setAccountMenuOpen(false)
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMobileNavOpen(false)
-        setAccountMenuOpen(false)
-      }
-    }
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMobileNavOpen(false) }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [])
@@ -131,7 +233,6 @@ function App() {
     setRoute(nextRoute)
     setQuery('')
     setMobileNavOpen(false)
-    setAccountMenuOpen(false)
   }
 
   const selectSection = (next: Section) => navigateTo(sectionPaths[next], { section: next })
@@ -166,7 +267,7 @@ function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <button className="connection-row" onClick={() => selectSection('Settings')}><span className="connection-dot" />Identity provider not connected</button>
+          <button className="connection-row" onClick={() => selectSection('Settings')}><span className="connection-dot" />{oidcConfigured ? 'Identity provider configured' : 'Identity provider not connected'}</button>
           <div className="sidebar-version">Drixel Platform · Foundation</div>
         </div>
       </aside>
@@ -184,15 +285,13 @@ function App() {
               {query && <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">Clear</button>}
             </div>}
             <div className="account-menu-wrap">
-              <button className="user-control" aria-label="Identity status" aria-expanded={accountMenuOpen} aria-controls="identity-status-panel" onClick={() => setAccountMenuOpen((open) => !open)}>
-                <span className="user-initials">DL</span><span className="user-control-text">Not signed in</span>
+              <button className="user-control" aria-label={accessToken ? 'Sign out' : 'Sign in'} onClick={() => {
+                if (accessToken) { setAccessToken(undefined); setIdToken(undefined); setAuthError(''); return }
+                if (oidcConfigured) void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.'))
+                else selectSection('Settings')
+              }}>
+                <span className="user-initials">{accessToken ? 'ID' : 'DL'}</span><span className="user-control-text">{accessToken ? 'Sign out' : oidcConfigured ? 'Sign in' : 'Set up sign-in'}</span>
               </button>
-              {accountMenuOpen && <div id="identity-status-panel" className="account-popover" role="region" aria-label="Identity connection status">
-                <strong>Drixel ID</strong>
-                <span>Single sign-on is not configured.</span>
-                <span className="account-popover-status">This console currently reads the business directory only.</span>
-                <a className="text-button" href={sectionPaths.Settings} onClick={(event) => followSectionLink(event, () => selectSection('Settings'))}>Identity settings <span aria-hidden="true">→</span></a>
-              </div>}
             </div>
           </div>
         </header>
@@ -205,9 +304,9 @@ function App() {
           {section === 'Services' && (route.slug
             ? <ServiceDetailPage service={selectedService} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Services')} onOpenBusiness={openBusiness} />
             : <ServicesPage rows={filteredServices} totalCount={services.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenService={openService} onOpenBusiness={openBusiness} />)}
-          {section === 'Accounts' && <AccountsPage onNavigate={selectSection} />}
+          {section === 'Accounts' && <AccountsPage onNavigate={selectSection} accessToken={accessToken} idToken={idToken} businesses={businesses} services={services} acceptToken={route.acceptToken} onSignIn={() => { void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.')) }} authError={authError} />}
           {section === 'Access roles' && <RolesPage />}
-          {section === 'Audit log' && <AuditPage />}
+          {section === 'Audit log' && <AuditPage accessToken={accessToken} onSignIn={() => { void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.')) }} />}
           {section === 'Settings' && <SettingsPage businessCount={businesses.length} serviceCount={services.length} directoryConnected={!directoryLoading && !directoryError} />}
         </main>
       </div>
@@ -480,8 +579,117 @@ function ServiceDetailPage({ service, loading, error, onRetry, onBack, onOpenBus
   </>
 }
 
-function AccountsPage({ onNavigate }: { onNavigate: (section: Section) => void }) {
-  return <><PageHeading eyebrow="IDENTITY" title="Accounts" description="Review employee and user identities across Drixel services." /><div className="setup-panel"><div className="setup-index">01</div><div className="setup-copy"><span className="eyebrow">REQUIRED SETUP</span><h2>Connect Drixel ID to an identity provider</h2><p>Accounts are not loaded from a live identity provider yet. Once connected, this page will show verified identities, employee and customer memberships, and service access.</p><ul><li>One person can use a single sign-in across Drixel services.</li><li>Employee and customer access remain separate.</li><li>Each business only sees accounts and permissions in its own scope.</li></ul><div className="setup-actions"><button className="button button-primary" onClick={() => onNavigate('Settings')}>Open identity settings</button><span>Account data is not simulated.</span></div></div></div><div className="info-strip"><strong>Storage model</strong><span>Global account IDs with separate organization memberships and product roles.</span></div><footer className="page-footer">Account listing and invitations require a connected identity provider and authenticated management API.</footer></>
+type AccountRow = { id: string; display_name: string; status: string; email: string | null; organization_id: string; organization_name: string; service_name: string | null; membership_kind: string; membership_status: string; role_code: string | null }
+
+function AccountsPage({ onNavigate, accessToken, idToken, businesses, services, acceptToken, onSignIn, authError }: { onNavigate: (section: Section) => void; accessToken?: string; idToken?: string; businesses: BusinessRow[]; services: Service[]; acceptToken?: string; onSignIn: () => void; authError: string }) {
+  const [accounts, setAccounts] = useState<AccountRow[]>([])
+  const [canAssignBusinessAdmin, setCanAssignBusinessAdmin] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [organizationId, setOrganizationId] = useState('')
+  const [applicationId, setApplicationId] = useState('')
+  const [roleCode, setRoleCode] = useState('employee')
+  const [membershipKind, setMembershipKind] = useState('employee')
+  const [inviteLink, setInviteLink] = useState('')
+  const [saving, setSaving] = useState(false)
+  const selectedBusinessSlug = businesses.find((business) => business.id === organizationId)?.slug
+  const availableServices = selectedBusinessSlug ? services.filter((service) => service.owner_slug === selectedBusinessSlug && service.status === 'active') : []
+
+  useEffect(() => {
+    if (!accessToken || acceptToken) return
+    const controller = new AbortController()
+    setLoading(true)
+    fetch('/api/accounts', { headers: { Authorization: `Bearer ${accessToken}` }, signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json() as { accounts?: AccountRow[]; can_assign_business_admin?: boolean; error?: string }
+        if (!response.ok) throw new Error(body.error ?? 'Account directory is unavailable')
+        setAccounts(body.accounts ?? [])
+        setCanAssignBusinessAdmin(Boolean(body.can_assign_business_admin))
+        setError('')
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        setError(reason instanceof Error ? reason.message : 'Account directory is unavailable')
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [accessToken, acceptToken])
+
+  useEffect(() => {
+    if (!accessToken || !acceptToken) return
+    const controller = new AbortController()
+    fetch('/api/invitations/accept', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: acceptToken, id_token: idToken }),
+      signal: controller.signal,
+    }).then(async (response) => {
+      const body = await response.json() as { error?: string; account_name?: string }
+      if (!response.ok) throw new Error(body.error ?? 'Invitation could not be accepted')
+      setError('')
+      setNotice(`Invitation accepted. Welcome to Drixel, ${body.account_name}.`)
+      window.history.replaceState(null, '', '/accounts')
+    }).catch((reason: unknown) => {
+      if (reason instanceof DOMException && reason.name === 'AbortError') return
+      setError(reason instanceof Error ? reason.message : 'Invitation could not be accepted')
+    })
+    return () => controller.abort()
+  }, [accessToken, acceptToken])
+
+  const createInvitation = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!accessToken || saving) return
+    setSaving(true)
+    setError('')
+    setNotice('')
+    setInviteLink('')
+    try {
+      const response = await fetch('/api/invitations', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, display_name: name, organization_id: organizationId, application_id: applicationId || undefined, role_code: roleCode, membership_kind: membershipKind }),
+      })
+      const body = await response.json() as { token?: string; error?: string }
+      if (!response.ok || !body.token) throw new Error(body.error ?? 'Invitation could not be created')
+      const link = `${window.location.origin}/accept-invitation#${encodeURIComponent(body.token)}`
+      setInviteLink(link)
+      setNotice('Invitation created. Copy the one-time link and send it to the invited person through your approved channel. It expires in 7 days.')
+      setName('')
+      setEmail('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Invitation could not be created')
+    } finally { setSaving(false) }
+  }
+
+  return <>
+    <PageHeading eyebrow="IDENTITY" title="Accounts" description="Manage Drixel identities and business memberships with access scoped to each organization." />
+    {authError && <div className="status-banner status-banner-error" role="alert"><strong>{authError}</strong></div>}
+    {notice && <div className="status-banner status-banner-connected" role="status"><strong>{notice}</strong></div>}
+    {error && <div className="status-banner status-banner-error" role="alert"><strong>{error}</strong></div>}
+    {!accessToken ? <div className="setup-panel"><div className="setup-index">01</div><div className="setup-copy"><span className="eyebrow">SECURE ACCESS</span><h2>{oidcConfigured ? 'Sign in to manage accounts' : 'Connect the Drixel identity provider'}</h2><p>{oidcConfigured ? 'Sign-in uses OpenID Connect authorization code flow with PKCE. Account and invitation data is returned only after the API verifies your identity and business role.' : 'Add the OIDC client settings to the frontend and API environment to enable secure sign-in.'}</p><ul><li>One verified identity can hold separate memberships across Drixel businesses.</li><li>Business administrators can manage accounts only within their assigned business.</li><li>Invitation links are single-use, email-bound, and expire after seven days.</li></ul><div className="setup-actions">{oidcConfigured ? <button className="button button-primary" type="button" onClick={onSignIn}>Sign in with Drixel ID</button> : <button className="button button-primary" type="button" onClick={() => onNavigate('Settings')}>Review identity setup</button>}<span>Passwords stay with the identity provider.</span></div></div></div> : <>
+      <section className="content-panel settings-section">
+        <div className="panel-heading"><div><h2>Invite a person</h2><p>Create an invitation for one business. The person must sign in with the invited verified email.</p></div></div>
+        <form className="invite-form" onSubmit={createInvitation}>
+          <label>Full name<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>
+          <label>Work email<input required type="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>
+          <label>Business<select required value={organizationId} onChange={(event) => { setOrganizationId(event.target.value); setApplicationId(''); setRoleCode('employee'); setMembershipKind('employee') }}><option value="">Choose a business</option>{businesses.map((business) => <option key={business.id} value={business.id}>{business.name}</option>)}</select></label>
+          <label>Service access<select value={applicationId} onChange={(event) => { const id = event.target.value; setApplicationId(id); setRoleCode(id ? 'end_user' : 'employee'); setMembershipKind(id ? 'customer' : 'employee') }}><option value="">Business membership only</option>{availableServices.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
+          <label>Membership<select value={membershipKind} onChange={(event) => setMembershipKind(event.target.value)}><option value="employee">Employee</option><option value="contractor">Contractor</option><option value="partner">Partner</option><option value="customer">Customer user</option></select></label>
+          <label>{applicationId ? 'Service role' : 'Business role'}<select value={roleCode} onChange={(event) => setRoleCode(event.target.value)}>{applicationId ? <><option value="end_user">End user</option><option value="support_agent">Support agent</option><option value="app_admin">Application administrator</option></> : <><option value="employee">Employee</option><option value="manager">Manager</option>{canAssignBusinessAdmin && <option value="business_admin">Business administrator</option>}</>}</select></label>
+          <div className="invite-submit"><button className="button button-primary" type="submit" disabled={saving || !organizationId}>{saving ? 'Creating invitation…' : 'Create invitation'}</button></div>
+        </form>
+        {inviteLink && <div className="invite-link-panel"><strong>One-time invitation link</strong><input aria-label="One-time invitation link" readOnly value={inviteLink} onFocus={(event) => event.currentTarget.select()} /><button type="button" className="button button-secondary" onClick={() => void navigator.clipboard.writeText(inviteLink).then(() => setNotice('Invitation link copied. Send it only to the invited person.')).catch(() => setNotice('Select and copy the invitation link.'))}>Copy link</button></div>}
+      </section>
+      <section className="content-panel">
+        <div className="panel-heading"><div><h2>Business accounts</h2><p>{loading ? 'Loading authorized accounts…' : `${accounts.length} account memberships visible in your authorized scope.`}</p></div></div>
+        <div className="table-scroll"><table className="data-table"><thead><tr><th>PERSON</th><th>EMAIL</th><th>BUSINESS</th><th>SERVICE</th><th>MEMBERSHIP</th><th>ROLE</th><th>STATUS</th></tr></thead><tbody>{accounts.map((account, index) => <tr key={`${account.id}-${account.organization_id}-${account.service_name ?? 'business'}-${index}`}><td><strong className="table-primary">{account.display_name}</strong></td><td>{account.email ?? 'No primary email'}</td><td>{account.organization_name}</td><td>{account.service_name ?? 'All business'}</td><td>{statusLabel(account.membership_kind)}</td><td>{account.role_code ? account.role_code.replaceAll('_', ' ') : 'No role assigned'}</td><td><span className={`status-tag ${account.membership_status === 'active' ? '' : 'status-tag-muted'}`}>{statusLabel(account.membership_status)}</span></td></tr>)}{!loading && accounts.length === 0 && <tr><td colSpan={7} className="empty-table">No accounts are assigned to businesses within your authorized scope.</td></tr>}</tbody></table></div>
+      </section>
+      <footer className="page-footer">Access to this page is checked by the API against your verified identity and scoped administrator role.</footer>
+    </>}
+  </>
 }
 
 function RolesPage() {
@@ -500,12 +708,33 @@ function RolesPage() {
   return <><PageHeading eyebrow="ACCESS CONTROL" title="Access roles" description="Permissions are assigned at a specific group, business, service, or customer workspace scope." /><div className="content-panel"><div className="panel-heading"><div><h2>Role catalogue</h2><p>Default roles created for scoped access control.</p></div><span className="panel-meta">10 ROLES</span></div><div className="table-scroll"><table className="data-table"><thead><tr><th>ROLE</th><th>SCOPE</th><th>PERMISSION SUMMARY</th></tr></thead><tbody>{roleRows.map(([name, scope, description]) => <tr key={name}><td><strong className="table-primary">{name}</strong></td><td><span className="scope-tag">{scope}</span></td><td>{description}</td></tr>)}</tbody></table></div></div><div className="plain-note"><strong>Access rule</strong><p>Membership in one business does not grant access to other Drixel businesses or their customer data.</p></div></>
 }
 
-function AuditPage() {
-  return <><PageHeading eyebrow="GOVERNANCE" title="Audit log" description="Track important access and administration events across the group." /><div className="empty-state"><div className="empty-state-title">Audit events will appear here</div><p>The database is prepared for administrative audit events. Live events will be shown after the management API is connected.</p></div></>
+type AuditEvent = { id: number; action: string; target_type: string; target_id: string; occurred_at: string; actor_name: string | null; organization_name: string | null }
+
+function AuditPage({ accessToken, onSignIn }: { accessToken?: string; onSignIn: () => void }) {
+  const [events, setEvents] = useState<AuditEvent[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!accessToken) return
+    const controller = new AbortController()
+    setLoading(true)
+    fetch('/api/audit-log', { headers: { Authorization: `Bearer ${accessToken}` }, signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json() as { events?: AuditEvent[]; error?: string }
+        if (!response.ok) throw new Error(body.error ?? 'Audit log is unavailable')
+        setEvents(body.events ?? [])
+        setError('')
+      }).catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        setError(reason instanceof Error ? reason.message : 'Audit log is unavailable')
+      }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [accessToken])
+  return <><PageHeading eyebrow="GOVERNANCE" title="Audit log" description="Review recent account and access changes within your authorized business scope." />{!accessToken ? <div className="empty-state"><div className="empty-state-title">Sign in to view audit events</div><p>Audit records are restricted to authorized Drixel administrators.</p><button className="button button-primary" onClick={onSignIn} disabled={!oidcConfigured}>Sign in</button></div> : <section className="content-panel"><div className="panel-heading"><div><h2>Recent events</h2><p>{loading ? 'Loading audit history…' : `Showing ${events.length} most recent events in your scope.`}</p></div></div>{error && <div className="status-banner status-banner-error" role="alert"><strong>{error}</strong></div>}<div className="table-scroll"><table className="data-table"><thead><tr><th>WHEN</th><th>EVENT</th><th>ACTOR</th><th>BUSINESS</th><th>RECORD</th></tr></thead><tbody>{events.map((event) => <tr key={event.id}><td>{new Date(event.occurred_at).toLocaleString()}</td><td><strong className="table-primary">{event.action}</strong></td><td>{event.actor_name ?? 'System'}</td><td>{event.organization_name ?? 'Group'}</td><td>{event.target_type} · {event.target_id}</td></tr>)}{!loading && events.length === 0 && <tr><td colSpan={5} className="empty-table">No audit events are recorded in your authorized scope.</td></tr>}</tbody></table></div></section>}</>
 }
 
 function SettingsPage({ businessCount, serviceCount, directoryConnected }: { businessCount: number; serviceCount: number; directoryConnected: boolean }) {
-  return <><PageHeading eyebrow="CONFIGURATION" title="Settings" description="Configure the shared identity and group directory services." /><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Identity provider</h2><p>Single sign-on and account verification.</p></div><span className="status-tag status-tag-muted">Not connected</span></div><div className="settings-row"><div><strong>Provider</strong><span>Not selected</span></div><div><strong>Protocol</strong><span>OpenID Connect</span></div><div><strong>Multi-factor authentication</strong><span>Required for administrators</span></div></div><div className="settings-note">Provider setup is pending. Configuration controls will appear after an authenticated identity management service is connected.</div></section><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Group directory</h2><p>Business and service registry in PostgreSQL.</p></div><span className={`status-tag ${directoryConnected ? '' : 'status-tag-muted'}`}>{directoryConnected ? 'Connected' : 'Unavailable'}</span></div><div className="settings-row"><div><strong>Parent organization</strong><span>Drixel Labs Inc</span></div><div><strong>Business units</strong><span>{directoryConnected ? `${businessCount} registered` : 'Unavailable'}</span></div><div><strong>Services</strong><span>{directoryConnected ? `${serviceCount} registered` : 'Unavailable'}</span></div></div></section><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Security boundaries</h2><p>Current database controls.</p></div></div><ul className="security-list"><li>The portfolio API uses a dedicated read-only database role.</li><li>Row-level security hides customer workspaces from the portfolio API.</li><li>Account data remains unavailable until Drixel ID is connected.</li></ul></section><footer className="page-footer">Identity and account administration require an authenticated management API.</footer></>
+  return <><PageHeading eyebrow="CONFIGURATION" title="Settings" description="Configure the shared identity and group directory services." /><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Identity provider</h2><p>Single sign-on and account verification.</p></div><span className={`status-tag ${oidcConfigured ? '' : 'status-tag-muted'}`}>{oidcConfigured ? 'Configured' : 'Not connected'}</span></div><div className="settings-row"><div><strong>Provider</strong><span>{oidcConfigured ? oidcConfig.issuer : 'Not configured'}</span></div><div><strong>Protocol</strong><span>OpenID Connect with PKCE</span></div><div><strong>Administrator MFA</strong><span>Enforce in the identity provider</span></div></div><div className="settings-note">Configure the issuer, API audience, JWKS URI, public client ID, authorization endpoint, and token endpoint in the local environment. Register the exact callback URL shown in the README.</div></section><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Group directory</h2><p>Business and service registry in PostgreSQL.</p></div><span className={`status-tag ${directoryConnected ? '' : 'status-tag-muted'}`}>{directoryConnected ? 'Connected' : 'Unavailable'}</span></div><div className="settings-row"><div><strong>Parent organization</strong><span>Drixel Labs Inc</span></div><div><strong>Business units</strong><span>{directoryConnected ? `${businessCount} registered` : 'Unavailable'}</span></div><div><strong>Services</strong><span>{directoryConnected ? `${serviceCount} registered` : 'Unavailable'}</span></div></div></section><section className="content-panel settings-section"><div className="panel-heading"><div><h2>Security boundaries</h2><p>Current database controls.</p></div></div><ul className="security-list"><li>The portfolio API remains on a dedicated read-only database role.</li><li>Account management uses a separate server-only database credential and checks OIDC issuer, audience, and scoped roles.</li><li>Account passwords are never stored in this platform.</li></ul></section><footer className="page-footer">Never expose the management database credential in frontend variables or source code.</footer></>
 }
 
 export default App

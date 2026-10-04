@@ -29,8 +29,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-drixel_admin}
       POSTGRES_DB: ${POSTGRES_DB:-drixel_platform}
       POSTGRES_DIRECTORY_PASSWORD: ${POSTGRES_DIRECTORY_PASSWORD:?Set POSTGRES_DIRECTORY_PASSWORD in .env}
+      POSTGRES_MANAGEMENT_PASSWORD: ${POSTGRES_MANAGEMENT_PASSWORD:?Set POSTGRES_MANAGEMENT_PASSWORD in .env}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_BOOTSTRAP_ADMIN_EMAIL: ${OIDC_BOOTSTRAP_ADMIN_EMAIL:-}
+      OIDC_BOOTSTRAP_ADMIN_NAME: ${OIDC_BOOTSTRAP_ADMIN_NAME:-}
+      OIDC_BOOTSTRAP_ADMIN_SUBJECT: ${OIDC_BOOTSTRAP_ADMIN_SUBJECT:-}
     volumes:
       - ./db/migrations/002_directory_reader.sql:/opt/drixel/002_directory_reader.sql:ro
+      - ./db/migrations/003_identity_management.sql:/opt/drixel/003_identity_management.sql:ro
+      - ./db/init/04_bootstrap_owner.sql:/opt/drixel/004_bootstrap_owner.sql:ro
       - ./db/init/03_directory_reader_login.sh:/opt/drixel/03_directory_reader_login.sh:ro
     entrypoint: ["/bin/sh", "/opt/drixel/03_directory_reader_login.sh"]
     depends_on:
@@ -49,6 +56,12 @@ services:
       PGDATABASE: ${POSTGRES_DB:-drixel_platform}
       PGUSER: drixel_directory_reader
       PGPASSWORD: ${POSTGRES_DIRECTORY_PASSWORD:?Set POSTGRES_DIRECTORY_PASSWORD in .env}
+      PGMANAGEMENTUSER: drixel_management_api
+      PGMANAGEMENTPASSWORD: ${POSTGRES_MANAGEMENT_PASSWORD:?Set POSTGRES_MANAGEMENT_PASSWORD in .env}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:
