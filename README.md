@@ -15,7 +15,7 @@ These are modeled as operating units and services. The database does not assert 
 
 ## Start the local database
 
-1. Copy `.env.example` to `.env` and set separate local passwords for PostgreSQL administration, the directory reader, and the management API. OIDC settings can remain blank until an identity provider is selected.
+1. Copy `.env.example` to `.env` and set strong local passwords for Keycloak and the PostgreSQL administrator, directory reader, and management API.
 2. From this folder, run `docker compose up --build -d`.
 3. On a new database volume, PostgreSQL runs `db/migrations/001_initial.sql` and `db/seed/001_portfolio.sql`. The `directory_init` service applies the read-role and management-role migrations, and sets local database passwords, including when an existing database volume is reused.
 4. The API is available on port 3000. `GET /api/health` checks database connectivity; `GET /api/portfolio` returns business and service records only.
@@ -31,11 +31,23 @@ The compose setup requires Docker Desktop or Docker Engine with the Compose plug
 
 The console uses a restrained white, charcoal, and gray interface. Each screen has its own direct URL: `/overview`, `/businesses`, `/services`, `/accounts`, `/access-roles`, `/audit-log`, and `/settings`. Individual directory records have shareable detail routes at `/businesses/:slug` and `/services/:slug`; related business and service links connect those records. Navigation supports direct links, browser back/forward, and mobile navigation. Business and service pages use live directory responses, sortable columns, status filters, service owner filters, pagination, and CSV export of all matching loaded records. Group administrators can add businesses and services, and update names or statuses; each change is audit logged. When the API is unavailable, the interface reports that state rather than showing hard-coded records. The account page supports OIDC sign-in, business-scoped account listing, business and service invitations, invitation acceptance, and scoped access updates. Authorized group administrators can assign employee, manager, or business administrator roles and suspend or restore active business memberships. Business administrators can manage employee/manager and service roles within their business but cannot promote another business administrator. Pending invitations remain disabled until the invited person accepts with a verified identity. Access changes are audit logged.
 
+## Run Drixel ID locally
+
+The Compose stack includes a local Keycloak realm for Drixel ID. This is a development setup; do not expose Keycloak's development server to the public internet.
+
+1. Set `KEYCLOAK_ADMIN_USERNAME` and a strong `KEYCLOAK_ADMIN_PASSWORD` in `.env`.
+2. Run `docker compose up --build -d`. Keycloak imports the Drixel realm and the API fetches its signing keys over the private Compose network.
+3. Open `http://localhost:8080/admin` and sign in with the Keycloak administrator credentials. Create the first person account in the `drixel` realm. Set the account's email and mark it verified for local development.
+4. In that realm's Users page, copy the new account's ID. Set `OIDC_BOOTSTRAP_ADMIN_EMAIL`, `OIDC_BOOTSTRAP_ADMIN_NAME`, and `OIDC_BOOTSTRAP_ADMIN_SUBJECT` in `.env` to that account's email, name, and ID. Run `docker compose up -d directory_init` to grant the one-time group owner role.
+5. Start the web console with `npm run dev`, then sign in at the Vite URL shown in the terminal (the default is `http://localhost:5177`).
+
+The imported public client uses authorization code flow with PKCE and the console's local callback. No browser client secret is used. Local Keycloak accounts and passwords are separate from the Keycloak server administrator account.
+
 ## Configure OIDC sign-in
 
-1. Create an OIDC public client for the admin console. Enable authorization code flow with PKCE and allow the redirect URI `http://localhost:5173/auth/callback` for local development. Do not create a browser client secret. Allow the console origin to call the provider's token endpoint if it enforces CORS.
+1. For another identity provider or a shared deployment, create an OIDC public client for the admin console. Enable authorization code flow with PKCE and register the deployment's exact callback URI (the local Vite callback is `http://localhost:5177/auth/callback`). Do not create a browser client secret. Allow the console origin to call the provider's token endpoint if it enforces CORS.
 2. Set `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_CLIENT_ID`, and `OIDC_JWKS_URI` in `.env`. Set the matching `VITE_OIDC_ISSUER`, `VITE_OIDC_AUDIENCE`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_AUTHORIZATION_ENDPOINT`, and `VITE_OIDC_TOKEN_ENDPOINT` values. The API expects RS256 JWT access tokens whose audience is `OIDC_AUDIENCE`; it verifies issuer, audience, signature, expiry, and not-before time against the JWKS endpoint.
-3. To provision the first group owner, set `OIDC_BOOTSTRAP_ADMIN_EMAIL`, `OIDC_BOOTSTRAP_ADMIN_NAME`, and `OIDC_BOOTSTRAP_ADMIN_SUBJECT` to that person's verified provider identity. The initializer links the exact issuer and subject and applies the `group_owner` role once. The bootstrap email must not already belong to a different account. The marker prevents later restarts from re-granting a revoked role.
+3. To provision the first group owner with the selected identity provider, set `OIDC_BOOTSTRAP_ADMIN_EMAIL`, `OIDC_BOOTSTRAP_ADMIN_NAME`, and `OIDC_BOOTSTRAP_ADMIN_SUBJECT` to that person's verified provider identity. The initializer links the exact issuer and subject and applies the `group_owner` role once. The bootstrap email must not already belong to a different account. The marker prevents later restarts from re-granting a revoked role.
 4. Restart Docker Compose and Vite after changing environment values. Use HTTPS for shared deployments and register that deployment's exact callback URI. Never commit `.env` or expose `POSTGRES_MANAGEMENT_PASSWORD` to the browser.
 
 The SPA keeps access and ID tokens in memory. Each invitation link contains a random one-time token in the URL fragment, which is not sent in HTTP requests or referrer headers. The invitation is bound to the normalized email address, expires after seven days, and only activates its business or service membership and role after the invitee signs in with the same verified OIDC identity. A person already linked to a different identity cannot be merged by email alone. The administrator copies and sends the invitation link through an approved channel; no email delivery service is configured yet.
