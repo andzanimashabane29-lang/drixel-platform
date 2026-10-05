@@ -281,3 +281,73 @@ test('invitation acceptance requires a verified matching identity and activates 
     await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
   }
 })
+
+
+test('group administrators can update scoped member access and the change is audited', async () => {
+  const statements = []
+  const protectedServer = createApiServer(async () => ({ rows: [] }), {
+    verifyToken: async () => ({ iss: 'https://id.example', sub: 'owner-1' }),
+    transaction: async (operation) => operation(async (sql, values = []) => {
+      statements.push({ sql, values })
+      if (sql.includes('target_organization_membership')) {
+        return { rows: [{ actor_id: 'owner-account', can_manage_group: true, can_manage_business: false }] }
+      }
+      if (sql.includes('SELECT id FROM drixel.roles')) return { rows: [{ id: 'manager-role' }] }
+      return { rows: [], rowCount: 1 }
+    }),
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const response = await fetch(`${protectedOrigin}/api/accounts/33333333-3333-3333-3333-333333333333/access`, {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer valid', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        organization_id: '11111111-1111-1111-1111-111111111111',
+        role_code: 'manager',
+        membership_status: 'suspended',
+      }),
+    })
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), { updated: true, role_code: 'manager', membership_status: 'suspended' })
+    assert.ok(statements.some(({ sql, values }) => sql.includes('UPDATE drixel.organization_memberships') && values[2] === 'suspended'))
+    assert.ok(statements.some(({ sql }) => sql.includes('INSERT INTO drixel.role_assignments')))
+    assert.ok(statements.some(({ sql }) => sql.includes("'account.access_updated'")))
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test('business administrators cannot promote a member to business administrator', async () => {
+  const statements = []
+  const protectedServer = createApiServer(async () => ({ rows: [] }), {
+    verifyToken: async () => ({ iss: 'https://id.example', sub: 'business-admin' }),
+    transaction: async (operation) => operation(async (sql) => {
+      statements.push(sql)
+      if (sql.includes('target_organization_membership')) {
+        return { rows: [{ actor_id: 'business-admin-account', can_manage_group: false, can_manage_business: true }] }
+      }
+      return { rows: [], rowCount: 1 }
+    }),
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const response = await fetch(`${protectedOrigin}/api/accounts/33333333-3333-3333-3333-333333333333/access`, {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer valid', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        organization_id: '11111111-1111-1111-1111-111111111111',
+        role_code: 'business_admin',
+        membership_status: 'active',
+      }),
+    })
+    assert.equal(response.status, 403)
+    assert.deepEqual(await response.json(), { error: 'You cannot change access in this business or service' })
+    assert.equal(statements.some((sql) => sql.includes('UPDATE drixel.organization_memberships')), false)
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})
