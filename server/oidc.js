@@ -9,13 +9,17 @@ const decodePart = (value) => {
 
 export function createOidcVerifier({ issuer, audience, jwksUri, fetcher = fetch, now = () => Date.now() }) {
   if (!issuer || !audience || !jwksUri) return async () => { throw new AuthenticationError('Identity provider is not configured') }
-  const secureLocation = (value) => {
+  const secureLocation = (value, allowDockerService = false) => {
     try {
       const url = new URL(value)
-      return url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+      const localHosts = ['localhost', '127.0.0.1', '[::1]']
+      if (allowDockerService) localHosts.push('keycloak')
+      return url.protocol === 'https:' || (url.protocol === 'http:' && localHosts.includes(url.hostname))
     } catch { return false }
   }
-  if (!secureLocation(issuer) || !secureLocation(jwksUri)) {
+  // The local API container fetches Keycloak's signing keys over Docker's private
+  // service network. The token issuer remains the browser-visible localhost URL.
+  if (!secureLocation(issuer) || !secureLocation(jwksUri, true)) {
     return async () => { throw new AuthenticationError('Identity provider URLs must use HTTPS outside local development') }
   }
   let cachedKeys = new Map()

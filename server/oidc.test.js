@@ -38,3 +38,24 @@ test('OIDC verifier refuses tokens when provider settings are missing', async ()
   const verify = createOidcVerifier({ issuer: '', audience: '', jwksUri: '' })
   await assert.rejects(verify('token'), /not configured/)
 })
+
+test('OIDC verifier permits the local Keycloak Docker host for JWKS only', async () => {
+  const verify = createOidcVerifier({
+    issuer: validClaims.iss,
+    audience: validClaims.aud,
+    jwksUri: 'http://keycloak:8080/realms/drixel/protocol/openid-connect/certs',
+    fetcher,
+    now,
+  })
+  const claims = await verify(makeToken(validClaims))
+  assert.equal(claims.sub, 'account-subject')
+
+  const insecureIssuer = createOidcVerifier({
+    issuer: 'http://keycloak:8080/realms/drixel',
+    audience: validClaims.aud,
+    jwksUri: 'http://keycloak:8080/realms/drixel/protocol/openid-connect/certs',
+    fetcher,
+    now,
+  })
+  await assert.rejects(insecureIssuer(makeToken({ ...validClaims, iss: 'http://keycloak:8080/realms/drixel' })), /HTTPS/)
+})
