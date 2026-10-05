@@ -276,66 +276,66 @@ export function createApiServer(query, options = {}) {
       }
       try {
         const result = await runTransaction(async (tx) => {
-          const application = await tx(\`
+          const application = await tx(`
             SELECT application.id, application.owner_organization_id, owner.slug AS owner_slug
             FROM drixel.applications AS application
             JOIN drixel.organizations AS owner ON owner.id = application.owner_organization_id
             WHERE application.slug = $1 AND application.status = 'active' AND owner.status = 'active'
-          \`, [applicationSlug])
+          `, [applicationSlug])
           if (!application.rows[0]) return { unavailable: true }
           const app = application.rows[0]
-          const identity = await tx(\`
+          const identity = await tx(`
             SELECT account.id, account.status, account.display_name
             FROM drixel.account_identities AS identity
             JOIN drixel.accounts AS account ON account.id = identity.account_id
             WHERE identity.issuer = $1 AND identity.subject = $2
             FOR UPDATE OF account
-          \`, [serviceIdentityIssuer, subject])
+          `, [serviceIdentityIssuer, subject])
           let account = identity.rows[0]
           let created = false
           if (!account) {
             if (email) {
-              const emailOwner = await tx(\`SELECT account_id FROM drixel.account_emails WHERE normalized_email = $1\`, [email])
+              const emailOwner = await tx(`SELECT account_id FROM drixel.account_emails WHERE normalized_email = $1`, [email])
               if (emailOwner.rows[0]) return { identityConflict: true }
             }
-            const inserted = await tx(\`INSERT INTO drixel.accounts (display_name) VALUES ($1) RETURNING id, status, display_name\`,
+            const inserted = await tx(`INSERT INTO drixel.accounts (display_name) VALUES ($1) RETURNING id, status, display_name`,
               [displayName || (email ? email.split('@')[0] : 'Drixel user')])
             account = inserted.rows[0]
-            await tx(\`INSERT INTO drixel.account_identities (account_id, issuer, subject) VALUES ($1, $2, $3)\`,
+            await tx(`INSERT INTO drixel.account_identities (account_id, issuer, subject) VALUES ($1, $2, $3)`,
               [account.id, serviceIdentityIssuer, subject])
-            if (email) await tx(\`INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary) VALUES ($1, $2, true, true)\`, [account.id, email])
+            if (email) await tx(`INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary) VALUES ($1, $2, true, true)`, [account.id, email])
             created = true
           } else if (account.status !== 'active') {
             return { inactiveAccount: true }
           } else if (email) {
-            const emailOwner = await tx(\`SELECT account_id FROM drixel.account_emails WHERE normalized_email = $1\`, [email])
+            const emailOwner = await tx(`SELECT account_id FROM drixel.account_emails WHERE normalized_email = $1`, [email])
             if (emailOwner.rows[0] && emailOwner.rows[0].account_id !== account.id) return { identityConflict: true }
             if (!emailOwner.rows[0]) {
-              await tx(\`INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary)
-                        VALUES ($1, $2, true, NOT EXISTS (SELECT 1 FROM drixel.account_emails WHERE account_id = $1 AND is_primary))\`,
+              await tx(`INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary)
+                        VALUES ($1, $2, true, NOT EXISTS (SELECT 1 FROM drixel.account_emails WHERE account_id = $1 AND is_primary))`,
               [account.id, email])
             }
           }
-          const organizationMembership = await tx(\`
+          const organizationMembership = await tx(`
             SELECT status FROM drixel.organization_memberships
             WHERE organization_id = $1 AND account_id = $2
-          \`, [app.owner_organization_id, account.id])
+          `, [app.owner_organization_id, account.id])
           if (organizationMembership.rows[0] && organizationMembership.rows[0].status !== 'active') return { inactiveMembership: true }
           if (!organizationMembership.rows[0]) {
-            await tx(\`INSERT INTO drixel.organization_memberships
+            await tx(`INSERT INTO drixel.organization_memberships
                 (organization_id, account_id, kind, status, joined_at)
-              VALUES ($1, $2, 'customer', 'active', now())\`, [app.owner_organization_id, account.id])
+              VALUES ($1, $2, 'customer', 'active', now())`, [app.owner_organization_id, account.id])
           }
-          const appMembership = await tx(\`
+          const appMembership = await tx(`
             SELECT status FROM drixel.application_memberships
             WHERE application_id = $1 AND account_id = $2
-          \`, [app.id, account.id])
+          `, [app.id, account.id])
           if (appMembership.rows[0] && appMembership.rows[0].status !== 'active') return { inactiveMembership: true }
           if (!appMembership.rows[0]) {
-            await tx(\`INSERT INTO drixel.application_memberships (application_id, account_id, status)
-                      VALUES ($1, $2, 'active')\`, [app.id, account.id])
+            await tx(`INSERT INTO drixel.application_memberships (application_id, account_id, status)
+                      VALUES ($1, $2, 'active')`, [app.id, account.id])
           }
-          await tx(\`
+          await tx(`
             INSERT INTO drixel.role_assignments (account_id, role_id, scope, application_id)
             SELECT $1, role.id, 'application', $2
             FROM drixel.roles AS role
@@ -347,12 +347,14 @@ export function createApiServer(query, options = {}) {
                   AND (assignment.expires_at IS NULL OR assignment.expires_at > now())
               )
             ON CONFLICT DO NOTHING
-          \`, [account.id, app.id])
-          await tx(\`INSERT INTO drixel.audit_events
-              (organization_id, application_id, action, target_type, target_id, details)
-            VALUES ($1, $2, 'account.application_access_synced', 'account', $3,
-              jsonb_build_object('source', 'service_sync', 'created', $4))\`,
-          [app.owner_organization_id, app.id, account.id, created])
+          `, [account.id, app.id])
+          if (created || !appMembership.rows[0]) {
+            await tx(`INSERT INTO drixel.audit_events
+                (organization_id, application_id, action, target_type, target_id, details)
+              VALUES ($1, $2, 'account.application_access_synced', 'account', $3,
+                jsonb_build_object('source', 'service_sync', 'created', $4))`,
+            [app.owner_organization_id, app.id, account.id, created])
+          }
           return { accountId: account.id, created }
         })
         if (result.unavailable) return sendJson(response, 404, { error: 'Active service not found' })
