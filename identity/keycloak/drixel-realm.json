@@ -19,8 +19,12 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:5177/auth/callback"],
-      "webOrigins": ["http://localhost:5177"],
+      "redirectUris": [
+        "http://localhost:5177/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:5177"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "http://localhost:5177/*"
@@ -38,6 +42,36 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "a-chatz-supabase",
+      "name": "A-Chatz Supabase Auth",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://poonntsdomkzfqidboug.supabase.co/auth/v1/callback"
+      ],
+      "webOrigins": []
+    },
+    {
+      "clientId": "drixel-sa-firebase",
+      "name": "Drixel SA Firebase Auth",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://drixel-sa.firebaseapp.com/__/auth/handler"
+      ],
+      "webOrigins": []
     }
   ]
 }
