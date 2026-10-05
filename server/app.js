@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer } from 'node:http'
 import { AuthenticationError, bearerToken } from './oidc.js'
 
@@ -184,11 +184,27 @@ const validRecordName = (value) => typeof value === 'string' && value.trim().len
 const validRecordStatus = (value) => ['active', 'suspended', 'closed'].includes(value)
 const isUniqueViolation = (error) => error?.code === '23505'
 
+function serviceKeySlug(serviceKeys, request) {
+  const token = bearerToken(request)
+  if (!token || typeof serviceKeys !== 'object' || !serviceKeys) return null
+  const candidate = Buffer.from(token)
+  let matched = null
+  for (const [slug, configuredSecret] of Object.entries(serviceKeys)) {
+    if (typeof configuredSecret !== 'string' || !configuredSecret) continue
+    const secret = Buffer.from(configuredSecret)
+    const equal = candidate.length === secret.length && timingSafeEqual(candidate, secret)
+    if (equal) matched = slug
+  }
+  return matched
+}
+
 export function createApiServer(query, options = {}) {
   const managementQuery = options.managementQuery ?? query
   const transaction = options.transaction
   const verifyToken = options.verifyToken
   const verifyIdToken = options.verifyIdToken
+  const serviceKeys = options.serviceKeys ?? {}
+  const serviceIdentityIssuer = options.serviceIdentityIssuer
   const runTransaction = transaction ?? (async (operation) => operation(managementQuery))
 
   const authenticate = async (request) => {
@@ -239,6 +255,113 @@ export function createApiServer(query, options = {}) {
         })
       } catch {
         return sendJson(response, 503, { error: 'Portfolio directory is unavailable' })
+      }
+    }
+
+
+    if (pathname === '/api/service-accounts/sync' && request.method === 'POST') {
+      const applicationSlug = serviceKeySlug(serviceKeys, request)
+      if (!applicationSlug) return sendJson(response, 401, { error: 'Service authentication required' })
+      if (!serviceIdentityIssuer) return sendJson(response, 503, { error: 'Service identity synchronization is not configured' })
+      let body
+      try { body = await readJson(request) }
+      catch (error) { return sendJson(response, 400, { error: error.message }) }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(response, 400, { error: 'Invalid account details' })
+      const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
+      const email = body.email == null ? '' : normalizeEmail(body.email)
+      const displayName = typeof body.display_name === 'string' ? body.display_name.trim() : ''
+      if (!subject || subject.length > 255 || (body.email != null && (!email || !email.includes('@') || body.email_verified !== true))
+        || (displayName && displayName.length > 120)) {
+        return sendJson(response, 400, { error: 'Provide a valid subject and verified email when supplied' })
+      }
+      try {
+        const result = await runTransaction(async (tx) => {
+          const application = await tx(\`
+            SELECT application.id, application.owner_organization_id, owner.slug AS owner_slug
+            FROM drixel.applications AS application
+            JOIN drixel.organizations AS owner ON owner.id = application.owner_organization_id
+            WHERE application.slug = $1 AND application.status = 'active' AND owner.status = 'active'
+          \`, [applicationSlug])
+          if (!application.rows[0]) return { unavailable: true }
+          const app = application.rows[0]
+          const identity = await tx(\`
+            SELECT account.id, account.status, account.display_name
+            FROM drixel.account_identities AS identity
+            JOIN drixel.accounts AS account ON account.id = identity.account_id
+            WHERE identity.issuer = $1 AND identity.subject = $2
+            FOR UPDATE OF account
+          \`, [serviceIdentityIssuer, subject])
+          let account = identity.rows[0]
+          let created = false
+          if (!account) {
+            if (email) {
+              const emailOwner = await tx(\`SELECT account_id FROM drixel.account_emails WHERE normalized_email = $1\`, [email])
+              if (emailOwner.rows[0]) return { identityConflict: true }
+            }
+            const inserted = await tx(\`INSERT INTO drixel.accounts (display_name) VALUES ($1) RETURNING id, status, display_name\`,
+              [displayName || (email ? email.split('@')[0] : 'Drixel user')])
+            account = inserted.rows[0]
+            await tx(\`INSERT INTO drixel.account_identities (account_id, issuer, subject) VALUES ($1, $2, $3)\`,
+              [account.id, serviceIdentityIssuer, subject])
+            if (email) await tx(\`INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary) VALUES ($1, $2, true, true)\`, [account.id, email])
+            created = true
+          } else if (account.status !== 'active') {
+            return { inactiveAccount: true }
+          } else if (email) {
+            const emailOwner = await tx(\`SELECT account_id FROM drixel.account_emails WHERE normalized_email = $1\`, [email])
+            if (emailOwner.rows[0] && emailOwner.rows[0].account_id !== account.id) return { identityConflict: true }
+            if (!emailOwner.rows[0]) {
+              await tx(\`INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary)
+                        VALUES ($1, $2, true, NOT EXISTS (SELECT 1 FROM drixel.account_emails WHERE account_id = $1 AND is_primary))\`,
+              [account.id, email])
+            }
+          }
+          const organizationMembership = await tx(\`
+            SELECT status FROM drixel.organization_memberships
+            WHERE organization_id = $1 AND account_id = $2
+          \`, [app.owner_organization_id, account.id])
+          if (organizationMembership.rows[0] && organizationMembership.rows[0].status !== 'active') return { inactiveMembership: true }
+          if (!organizationMembership.rows[0]) {
+            await tx(\`INSERT INTO drixel.organization_memberships
+                (organization_id, account_id, kind, status, joined_at)
+              VALUES ($1, $2, 'customer', 'active', now())\`, [app.owner_organization_id, account.id])
+          }
+          const appMembership = await tx(\`
+            SELECT status FROM drixel.application_memberships
+            WHERE application_id = $1 AND account_id = $2
+          \`, [app.id, account.id])
+          if (appMembership.rows[0] && appMembership.rows[0].status !== 'active') return { inactiveMembership: true }
+          if (!appMembership.rows[0]) {
+            await tx(\`INSERT INTO drixel.application_memberships (application_id, account_id, status)
+                      VALUES ($1, $2, 'active')\`, [app.id, account.id])
+          }
+          await tx(\`
+            INSERT INTO drixel.role_assignments (account_id, role_id, scope, application_id)
+            SELECT $1, role.id, 'application', $2
+            FROM drixel.roles AS role
+            WHERE role.scope = 'application' AND role.code = 'end_user'
+              AND NOT EXISTS (
+                SELECT 1 FROM drixel.role_assignments assignment
+                WHERE assignment.account_id = $1 AND assignment.scope = 'application'
+                  AND assignment.application_id = $2
+                  AND (assignment.expires_at IS NULL OR assignment.expires_at > now())
+              )
+            ON CONFLICT DO NOTHING
+          \`, [account.id, app.id])
+          await tx(\`INSERT INTO drixel.audit_events
+              (organization_id, application_id, action, target_type, target_id, details)
+            VALUES ($1, $2, 'account.application_access_synced', 'account', $3,
+              jsonb_build_object('source', 'service_sync', 'created', $4))\`,
+          [app.owner_organization_id, app.id, account.id, created])
+          return { accountId: account.id, created }
+        })
+        if (result.unavailable) return sendJson(response, 404, { error: 'Active service not found' })
+        if (result.identityConflict) return sendJson(response, 409, { error: 'This verified email is already attached to a different Drixel account; link the existing account first' })
+        if (result.inactiveAccount || result.inactiveMembership) return sendJson(response, 403, { error: 'This Drixel account or service membership is inactive' })
+        return sendJson(response, result.created ? 201 : 200, { account_id: result.accountId, application: applicationSlug, synchronized: true })
+      } catch (error) {
+        if (isUniqueViolation(error)) return sendJson(response, 409, { error: 'This identity or email is already attached to a Drixel account' })
+        return sendJson(response, 503, { error: 'Service account synchronization is unavailable' })
       }
     }
 
