@@ -29,6 +29,7 @@ services:
     ports:
       - "${KEYCLOAK_PORT:-8080}:8080"
     volumes:
+      - drixel_keycloak:/opt/keycloak/data
       - ./identity/keycloak/drixel-realm.json:/opt/keycloak/data/import/drixel-realm.json:ro
 
   directory_init:
@@ -84,3 +85,4 @@ services:
 
 volumes:
   drixel_postgres:
+  drixel_keycloak:
