@@ -658,10 +658,14 @@ function ServiceDetailPage({ service, loading, error, onRetry, onBack, onOpenBus
   </>
 }
 
-type AccountRow = { id: string; display_name: string; status: string; email: string | null; organization_id: string; organization_name: string; service_name: string | null; membership_kind: string; membership_status: string; role_code: string | null }
+type AccountRow = { id: string; display_name: string; status: string; email: string | null; organization_id: string; organization_name: string; service_name: string | null; application_id: string | null; membership_kind: string; membership_status: string; role_code: string | null }
+type AccountAccessDraft = { role_code: string; membership_status: 'active' | 'suspended' }
+const accountAccessKey = (account: AccountRow) => `${account.id}:${account.organization_id}:${account.application_id ?? 'business'}`
 
 function AccountsPage({ onNavigate, accessToken, idToken, businesses, services, acceptToken, onSignIn, authError }: { onNavigate: (section: Section) => void; accessToken?: string; idToken?: string; businesses: BusinessRow[]; services: Service[]; acceptToken?: string; onSignIn: () => void; authError: string }) {
   const [accounts, setAccounts] = useState<AccountRow[]>([])
+  const [accessDrafts, setAccessDrafts] = useState<Record<string, AccountAccessDraft>>({})
+  const [savingAccessKey, setSavingAccessKey] = useState('')
   const [canAssignBusinessAdmin, setCanAssignBusinessAdmin] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -686,6 +690,10 @@ function AccountsPage({ onNavigate, accessToken, idToken, businesses, services, 
         const body = await response.json() as { accounts?: AccountRow[]; can_assign_business_admin?: boolean; error?: string }
         if (!response.ok) throw new Error(body.error ?? 'Account directory is unavailable')
         setAccounts(body.accounts ?? [])
+        setAccessDrafts(Object.fromEntries((body.accounts ?? []).map((account) => [accountAccessKey(account), {
+          role_code: account.role_code ?? (account.application_id ? 'end_user' : 'employee'),
+          membership_status: account.membership_status === 'suspended' ? 'suspended' as const : 'active' as const,
+        }])))
         setCanAssignBusinessAdmin(Boolean(body.can_assign_business_admin))
         setError('')
       })
@@ -743,6 +751,38 @@ function AccountsPage({ onNavigate, accessToken, idToken, businesses, services, 
     } finally { setSaving(false) }
   }
 
+  const saveAccountAccess = async (account: AccountRow) => {
+    if (!accessToken || savingAccessKey) return
+    const key = accountAccessKey(account)
+    const draft = accessDrafts[key]
+    if (!draft) return
+    setSavingAccessKey(key)
+    setError('')
+    setNotice('')
+    try {
+      const response = await fetch(`/api/accounts/${encodeURIComponent(account.id)}/access`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: account.organization_id,
+          application_id: account.application_id ?? undefined,
+          role_code: draft.role_code,
+          membership_status: draft.membership_status,
+        }),
+      })
+      const body = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(body.error ?? 'Access could not be updated')
+      setAccounts((current) => current.map((item) => accountAccessKey(item) === key
+        ? { ...item, role_code: draft.role_code, membership_status: draft.membership_status }
+        : item))
+      setNotice(`Access updated for ${account.display_name}. The change was recorded in the audit log.`)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Access could not be updated')
+    } finally {
+      setSavingAccessKey('')
+    }
+  }
+
   return <>
     <PageHeading eyebrow="IDENTITY" title="Accounts" description="Manage Drixel identities and business memberships with access scoped to each organization." />
     {authError && <div className="status-banner status-banner-error" role="alert"><strong>{authError}</strong></div>}
@@ -764,7 +804,29 @@ function AccountsPage({ onNavigate, accessToken, idToken, businesses, services, 
       </section>
       <section className="content-panel">
         <div className="panel-heading"><div><h2>Business accounts</h2><p>{loading ? 'Loading authorized accounts…' : `${accounts.length} account memberships visible in your authorized scope.`}</p></div></div>
-        <div className="table-scroll"><table className="data-table"><thead><tr><th>PERSON</th><th>EMAIL</th><th>BUSINESS</th><th>SERVICE</th><th>MEMBERSHIP</th><th>ROLE</th><th>STATUS</th></tr></thead><tbody>{accounts.map((account, index) => <tr key={`${account.id}-${account.organization_id}-${account.service_name ?? 'business'}-${index}`}><td><strong className="table-primary">{account.display_name}</strong></td><td>{account.email ?? 'No primary email'}</td><td>{account.organization_name}</td><td>{account.service_name ?? 'All business'}</td><td>{statusLabel(account.membership_kind)}</td><td>{account.role_code ? account.role_code.replaceAll('_', ' ') : 'No role assigned'}</td><td><span className={`status-tag ${account.membership_status === 'active' ? '' : 'status-tag-muted'}`}>{statusLabel(account.membership_status)}</span></td></tr>)}{!loading && accounts.length === 0 && <tr><td colSpan={7} className="empty-table">No accounts are assigned to businesses within your authorized scope.</td></tr>}</tbody></table></div>
+        <div className="table-scroll"><table className="data-table account-table"><thead><tr><th>PERSON</th><th>EMAIL</th><th>BUSINESS</th><th>SERVICE</th><th>MEMBERSHIP</th><th>ROLE</th><th>STATUS</th><th>ACCESS</th></tr></thead><tbody>{accounts.map((account, index) => {
+          const key = accountAccessKey(account)
+          const draft = accessDrafts[key] ?? { role_code: account.role_code ?? (account.application_id ? 'end_user' : 'employee'), membership_status: account.membership_status === 'suspended' ? 'suspended' as const : 'active' as const }
+          const pending = account.membership_status === 'invited'
+          return <tr key={`${account.id}-${account.organization_id}-${account.application_id ?? 'business'}-${index}`}>
+            <td><strong className="table-primary">{account.display_name}</strong></td>
+            <td>{account.email ?? 'No primary email'}</td>
+            <td>{account.organization_name}</td>
+            <td>{account.service_name ?? 'All business'}</td>
+            <td>{statusLabel(account.membership_kind)}</td>
+            <td>{account.role_code ? account.role_code.replaceAll('_', ' ') : 'Pending invitation'}</td>
+            <td><span className={`status-tag ${account.membership_status === 'active' ? '' : 'status-tag-muted'}`}>{statusLabel(account.membership_status)}</span></td>
+            <td className="account-access-cell">{pending ? <span className="directory-toolbar-note">Awaiting sign-in</span> : <>
+              <select aria-label={`Role for ${account.display_name} in ${account.service_name ?? account.organization_name}`} value={draft.role_code} onChange={(event) => setAccessDrafts((current) => ({ ...current, [key]: { ...draft, role_code: event.target.value } }))}>
+                {account.application_id ? <><option value="end_user">End user</option><option value="support_agent">Support agent</option><option value="app_admin">Application administrator</option></> : <><option value="employee">Employee</option><option value="manager">Manager</option>{canAssignBusinessAdmin && <option value="business_admin">Business administrator</option>}</>}
+              </select>
+              <select aria-label={`Membership status for ${account.display_name}`} value={draft.membership_status} onChange={(event) => setAccessDrafts((current) => ({ ...current, [key]: { ...draft, membership_status: event.target.value as AccountAccessDraft['membership_status'] } }))}>
+                <option value="active">Active</option><option value="suspended">Suspended</option>
+              </select>
+              <button className="button button-secondary" type="button" disabled={savingAccessKey === key || !accessToken} onClick={() => void saveAccountAccess(account)}>{savingAccessKey === key ? 'Saving…' : 'Save access'}</button>
+            </>}</td>
+          </tr>
+        })}{!loading && accounts.length === 0 && <tr><td colSpan={8} className="empty-table">No accounts are assigned to businesses within your authorized scope.</td></tr>}</tbody></table></div>
       </section>
       <footer className="page-footer">Access to this page is checked by the API against your verified identity and scoped administrator role.</footer>
     </>}

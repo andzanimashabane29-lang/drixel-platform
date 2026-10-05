@@ -66,7 +66,7 @@ function accountsQuery() {
     ), visible AS (
       SELECT DISTINCT target.id, target.display_name, target.status, email.email,
              membership.organization_id, organization.display_name AS organization_name,
-             NULL::text AS service_name, membership.kind AS membership_kind,
+             NULL::text AS service_name, NULL::uuid AS application_id, membership.kind AS membership_kind,
              membership.status AS membership_status, assigned_role.code AS role_code
       FROM drixel.accounts AS target
       JOIN drixel.organization_memberships AS membership ON membership.account_id = target.id
@@ -82,7 +82,7 @@ function accountsQuery() {
       UNION ALL
       SELECT DISTINCT target.id, target.display_name, target.status, email.email,
              membership.organization_id, organization.display_name AS organization_name,
-             application.display_name AS service_name, membership.kind AS membership_kind,
+             application.display_name AS service_name, application.id AS application_id, membership.kind AS membership_kind,
              application_membership.status AS membership_status, application_role.code AS role_code
       FROM drixel.accounts AS target
       JOIN drixel.organization_memberships AS membership ON membership.account_id = target.id
@@ -358,6 +358,121 @@ export function createApiServer(query, options = {}) {
       }
     }
 
+    const accountAccess = pathname.match(/^\/api\/accounts\/([0-9a-f-]{36})\/access$/i)
+    if (request.method === 'PATCH' && accountAccess) {
+      let claims
+      try { claims = await authenticate(request) }
+      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      let body
+      try { body = await readJson(request) }
+      catch (error) { return sendJson(response, 400, { error: error.message }) }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(response, 400, { error: 'Invalid access update' })
+      const accountId = accountAccess[1]
+      const organizationId = typeof body.organization_id === 'string' ? body.organization_id : ''
+      const applicationId = typeof body.application_id === 'string' ? body.application_id : ''
+      const roleCode = typeof body.role_code === 'string' ? body.role_code : ''
+      const membershipStatus = body.membership_status
+      const roleScope = applicationId ? 'application' : 'organization'
+      const validRole = roleScope === 'application'
+        ? ['app_admin', 'support_agent', 'end_user'].includes(roleCode)
+        : ['business_admin', 'manager', 'employee'].includes(roleCode)
+      if (!/^[0-9a-f-]{36}$/i.test(accountId) || !/^[0-9a-f-]{36}$/i.test(organizationId)
+        || (applicationId && !/^[0-9a-f-]{36}$/i.test(applicationId))
+        || !validRole || !['active', 'suspended'].includes(membershipStatus)) {
+        return sendJson(response, 400, { error: 'Choose a valid business or service role and an active or suspended membership status' })
+      }
+      try {
+        const result = await runTransaction(async (tx) => {
+          const permission = await tx(`
+            SELECT actor.id AS actor_id,
+              EXISTS (
+                SELECT 1 FROM drixel.role_assignments assignment
+                JOIN drixel.roles grant_role ON grant_role.id = assignment.role_id
+                JOIN drixel.organization_memberships actor_membership
+                  ON actor_membership.account_id = actor.id
+                  AND actor_membership.organization_id = organization.parent_organization_id
+                  AND actor_membership.status = 'active'
+                WHERE assignment.account_id = actor.id AND assignment.scope = 'group'
+                  AND assignment.organization_id = organization.parent_organization_id
+                  AND grant_role.code IN ('group_owner', 'group_admin')
+                  AND (assignment.expires_at IS NULL OR assignment.expires_at > now())
+              ) AS can_manage_group,
+              EXISTS (
+                SELECT 1 FROM drixel.role_assignments assignment
+                JOIN drixel.roles grant_role ON grant_role.id = assignment.role_id
+                JOIN drixel.organization_memberships actor_membership
+                  ON actor_membership.account_id = actor.id
+                  AND actor_membership.organization_id = organization.id
+                  AND actor_membership.status = 'active'
+                WHERE assignment.account_id = actor.id AND assignment.scope = 'organization'
+                  AND assignment.organization_id = organization.id AND grant_role.code = 'business_admin'
+                  AND (assignment.expires_at IS NULL OR assignment.expires_at > now())
+              ) AS can_manage_business
+            FROM drixel.accounts actor
+            JOIN drixel.account_identities identity ON identity.account_id = actor.id
+            JOIN drixel.organizations organization ON organization.id = $3
+            JOIN drixel.accounts target_account ON target_account.id = $4
+            JOIN drixel.organization_memberships target_organization_membership
+              ON target_organization_membership.account_id = target_account.id
+              AND target_organization_membership.organization_id = organization.id
+              AND target_organization_membership.status IN ('active', 'suspended')
+            LEFT JOIN drixel.applications application
+              ON application.id = NULLIF($5::text, '')::uuid
+              AND application.owner_organization_id = organization.id
+              AND application.status = 'active'
+            LEFT JOIN drixel.application_memberships target_application_membership
+              ON target_application_membership.account_id = target_account.id
+              AND target_application_membership.application_id = application.id
+              AND target_application_membership.status IN ('active', 'suspended')
+            WHERE identity.issuer = $1 AND identity.subject = $2
+              AND actor.status = 'active' AND organization.status = 'active'
+              AND organization.kind IN ('business_unit', 'subsidiary')
+              AND ($5::text = '' OR (application.id IS NOT NULL AND target_application_membership.id IS NOT NULL))
+          `, [claims.iss, claims.sub, organizationId, accountId, applicationId])
+          const actor = permission.rows[0]
+          if (!actor) return { notFound: true }
+          if (!actor.can_manage_group && !actor.can_manage_business) return { forbidden: true }
+          if (roleCode === 'business_admin' && !actor.can_manage_group) return { forbidden: true }
+
+          const role = await tx(`SELECT id FROM drixel.roles WHERE code = $1 AND scope = $2`, [roleCode, roleScope])
+          if (!role.rows[0]) return { invalidRole: true }
+          if (applicationId) {
+            await tx(`UPDATE drixel.application_memberships SET status = $3
+              WHERE account_id = $1 AND application_id = $2 AND status IN ('active', 'suspended')`,
+            [accountId, applicationId, membershipStatus])
+            await tx(`DELETE FROM drixel.role_assignments
+              WHERE account_id = $1 AND scope = 'application' AND application_id = $2`, [accountId, applicationId])
+            await tx(`INSERT INTO drixel.role_assignments
+              (account_id, role_id, scope, application_id, granted_by)
+              VALUES ($1, $2, 'application', $3, $4) ON CONFLICT DO NOTHING`,
+            [accountId, role.rows[0].id, applicationId, actor.actor_id])
+          } else {
+            await tx(`UPDATE drixel.organization_memberships SET status = $3
+              WHERE account_id = $1 AND organization_id = $2 AND status IN ('active', 'suspended')`,
+            [accountId, organizationId, membershipStatus])
+            await tx(`DELETE FROM drixel.role_assignments
+              WHERE account_id = $1 AND scope = 'organization' AND organization_id = $2`, [accountId, organizationId])
+            await tx(`INSERT INTO drixel.role_assignments
+              (account_id, role_id, scope, organization_id, granted_by)
+              VALUES ($1, $2, 'organization', $3, $4) ON CONFLICT DO NOTHING`,
+            [accountId, role.rows[0].id, organizationId, actor.actor_id])
+          }
+          await tx(`INSERT INTO drixel.audit_events
+            (actor_account_id, organization_id, application_id, action, target_type, target_id, details)
+            VALUES ($1, $2, NULLIF($3::text, '')::uuid, 'account.access_updated', 'account', $4,
+              jsonb_build_object('role', $5, 'membership_status', $6, 'scope', $7))`,
+          [actor.actor_id, organizationId, applicationId, accountId, roleCode, membershipStatus, roleScope])
+          return { updated: true }
+        })
+        if (result.forbidden) return sendJson(response, 403, { error: 'You cannot change access in this business or service' })
+        if (result.notFound) return sendJson(response, 404, { error: 'An active or suspended membership was not found' })
+        if (result.invalidRole) return sendJson(response, 400, { error: 'The selected role is not configured for this scope' })
+        return sendJson(response, 200, { updated: true, role_code: roleCode, membership_status: membershipStatus })
+      } catch {
+        return sendJson(response, 503, { error: 'Access could not be updated' })
+      }
+    }
+
     if (request.method === 'GET' && pathname === '/api/audit-log') {
       let claims
       try { claims = await authenticate(request) }
@@ -574,8 +689,8 @@ export function createApiServer(query, options = {}) {
       }
     }
 
-    if (request.method !== 'GET' && request.method !== 'POST') {
-      response.setHeader('Allow', 'GET, POST')
+    if (!['GET', 'POST', 'PATCH'].includes(request.method ?? 'GET')) {
+      response.setHeader('Allow', 'GET, POST, PATCH')
       return sendJson(response, 405, { error: 'Method not allowed' })
     }
     return sendJson(response, 404, { error: 'Not found' })
