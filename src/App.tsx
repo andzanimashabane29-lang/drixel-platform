@@ -692,7 +692,7 @@ function AccountsPage({ onNavigate, accessToken, idToken, businesses, services, 
         setAccounts(body.accounts ?? [])
         setAccessDrafts(Object.fromEntries((body.accounts ?? []).map((account) => [accountAccessKey(account), {
           role_code: account.role_code ?? (account.application_id ? 'end_user' : 'employee'),
-          membership_status: account.membership_status === 'suspended' ? 'suspended' : 'active',
+          membership_status: account.membership_status === 'suspended' ? 'suspended' as const : 'active' as const,
         }])))
         setCanAssignBusinessAdmin(Boolean(body.can_assign_business_admin))
         setError('')
