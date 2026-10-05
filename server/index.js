@@ -29,6 +29,12 @@ for (const pool of [directoryPool, managementPool]) pool.on('error', () => {
 })
 
 const port = Number(process.env.API_PORT ?? 3000)
+const serviceKeys = JSON.parse(process.env.DRIXEL_SERVICE_KEYS_JSON ?? '{}')
+if (!serviceKeys || typeof serviceKeys !== 'object' || Array.isArray(serviceKeys)
+  || Object.entries(serviceKeys).some(([slug, secret]) => !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)
+    || typeof secret !== 'string' || Buffer.byteLength(secret) < 32)) {
+  throw new Error('DRIXEL_SERVICE_KEYS_JSON must map service slugs to secrets of at least 32 bytes')
+}
 const server = createApiServer((text, values) => directoryPool.query(text, values), {
   managementQuery: (text, values) => managementPool.query(text, values),
   transaction: async (operation) => {
@@ -55,6 +61,8 @@ const server = createApiServer((text, values) => directoryPool.query(text, value
     audience: process.env.OIDC_CLIENT_ID,
     jwksUri: process.env.OIDC_JWKS_URI,
   }),
+  serviceKeys,
+  serviceIdentityIssuer: process.env.OIDC_ISSUER,
 })
 
 server.listen(port, '0.0.0.0', () => {

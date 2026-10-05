@@ -351,3 +351,90 @@ test('business administrators cannot promote a member to business administrator'
     await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
   }
 })
+
+
+test('service account synchronization rejects missing credentials before reading account data', async () => {
+  let queried = false
+  const protectedServer = createApiServer(async () => { queried = true; return { rows: [] } }, {
+    serviceKeys: { 'a-chatz': 'a'.repeat(40) }, serviceIdentityIssuer: 'https://id.example',
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const response = await fetch(`${protectedOrigin}/api/service-accounts/sync`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subject: 'person-1' }),
+    })
+    assert.equal(response.status, 401)
+    assert.equal(queried, false)
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test('service account synchronization creates customer access and never merges by email alone', async () => {
+  const statements = []
+  const execute = async (sql, values = []) => {
+    statements.push({ sql, values })
+    if (sql.includes('FROM drixel.applications AS application')) return { rows: [{ id: 'app-id', owner_organization_id: 'org-id', owner_slug: 'drixel-sa' }] }
+    if (sql.includes('FROM drixel.account_identities AS identity')) return { rows: [] }
+    if (sql.includes('SELECT account_id FROM drixel.account_emails')) return { rows: [] }
+    if (sql.includes('INSERT INTO drixel.accounts')) return { rows: [{ id: 'account-id', status: 'active', display_name: 'Customer' }] }
+    if (sql.includes('SELECT status FROM drixel.organization_memberships')) return { rows: [] }
+    if (sql.includes('SELECT status FROM drixel.application_memberships')) return { rows: [] }
+    return { rows: [], rowCount: 1 }
+  }
+  const protectedServer = createApiServer(async () => ({ rows: [] }), {
+    serviceKeys: { 'a-chatz': 'a'.repeat(40) }, serviceIdentityIssuer: 'https://id.example',
+    transaction: async (operation) => operation(execute),
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const response = await fetch(`${protectedOrigin}/api/service-accounts/sync`, {
+      method: 'POST', headers: { authorization: `Bearer ${'a'.repeat(40)}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ subject: 'person-1', email: 'customer@example.com', email_verified: true, display_name: 'Customer' }),
+    })
+    assert.equal(response.status, 201)
+    assert.deepEqual(await response.json(), { account_id: 'account-id', application: 'a-chatz', synchronized: true })
+    assert.ok(statements.some(({ sql, values }) => sql.includes('INSERT INTO drixel.account_identities') && values[1] === 'https://id.example'))
+    assert.ok(statements.some(({ sql }) => sql.includes("'customer', 'active'")))
+    assert.ok(statements.some(({ sql }) => sql.includes("role.code = 'end_user'")))
+    assert.ok(statements.some(({ sql }) => sql.includes("'account.application_access_synced'")))
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+
+test('repeat service synchronization is idempotent and does not flood the audit log', async () => {
+  const statements = []
+  const protectedServer = createApiServer(async () => ({ rows: [] }), {
+    serviceKeys: { 'a-chatz': 'a'.repeat(40) }, serviceIdentityIssuer: 'https://id.example',
+    transaction: async (operation) => operation(async (sql, values = []) => {
+      statements.push({ sql, values })
+      if (sql.includes('FROM drixel.applications AS application')) return { rows: [{ id: 'app-id', owner_organization_id: 'org-id', owner_slug: 'drixel-sa' }] }
+      if (sql.includes('FROM drixel.account_identities AS identity')) return { rows: [{ id: 'account-id', status: 'active', display_name: 'Customer' }] }
+      if (sql.includes('SELECT account_id FROM drixel.account_emails')) return { rows: [{ account_id: 'account-id' }] }
+      if (sql.includes('SELECT status FROM drixel.organization_memberships')) return { rows: [{ status: 'active' }] }
+      if (sql.includes('SELECT status FROM drixel.application_memberships')) return { rows: [{ status: 'active' }] }
+      return { rows: [], rowCount: 1 }
+    }),
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const response = await fetch(`${protectedOrigin}/api/service-accounts/sync`, {
+      method: 'POST', headers: { authorization: `Bearer ${'a'.repeat(40)}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ subject: 'person-1' }),
+    })
+    assert.equal(response.status, 200)
+    assert.equal((await response.json()).synchronized, true)
+    assert.equal(statements.some(({ sql }) => sql.includes('INSERT INTO drixel.audit_events')), false)
+    assert.equal(statements.some(({ sql }) => sql.includes('INSERT INTO drixel.application_memberships')), false)
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})
