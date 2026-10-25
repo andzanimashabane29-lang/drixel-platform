@@ -11,7 +11,7 @@
   "clients": [
     {
       "clientId": "drixel-platform-console",
-      "name": "Drixel Platform Console",
+      "name": "Drixel Accounts Console",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,
@@ -20,14 +20,16 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "http://localhost:5177/auth/callback"
+        "http://localhost:5177/auth/callback",
+        "https://www.accounts.drixelsa.co.za/auth/callback"
       ],
       "webOrigins": [
-        "http://localhost:5177"
+        "http://localhost:5177",
+        "https://www.accounts.drixelsa.co.za"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:5177/*"
+        "post.logout.redirect.uris": "http://localhost:5177/*##https://www.accounts.drixelsa.co.za/*"
       },
       "protocolMappers": [
         {
