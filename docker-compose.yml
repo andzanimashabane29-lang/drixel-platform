@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-drixel_platform}
-      POSTGRES_USER: ${POSTGRES_USER:-drixel_app}
+      POSTGRES_USER: ${POSTGRES_USER:-drixel_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -13,7 +13,7 @@ services:
       - ./db/migrations/001_initial.sql:/docker-entrypoint-initdb.d/01_initial.sql:ro
       - ./db/seed/001_portfolio.sql:/docker-entrypoint-initdb.d/02_portfolio.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-drixel_app} -d ${POSTGRES_DB:-drixel_platform}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-drixel_admin} -d ${POSTGRES_DB:-drixel_platform}"]
       interval: 5s
       timeout: 3s
       retries: 15
