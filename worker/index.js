@@ -1,3 +1,5 @@
+const FALLBACK_API_ORIGIN = 'https://drixel-platform-api-staging.onrender.com'
+
 const json = (status, body) => new Response(JSON.stringify(body), {
   status,
   headers: {
@@ -13,11 +15,11 @@ export default {
     const url = new URL(request.url)
 
     if (url.pathname.startsWith('/api/')) {
-      if (!env.API_ORIGIN) return json(503, { error: 'Production API origin is not configured' })
+      const apiOrigin = env.API_ORIGIN || FALLBACK_API_ORIGIN
 
       let upstream
       try {
-        upstream = new URL(env.API_ORIGIN)
+        upstream = new URL(apiOrigin)
       } catch {
         return json(503, { error: 'Production API origin is invalid' })
       }
