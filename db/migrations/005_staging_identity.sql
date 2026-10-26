@@ -113,6 +113,11 @@ CREATE TABLE IF NOT EXISTS drixel.invitations (
   accepted_at timestamptz
 );
 
+CREATE TABLE IF NOT EXISTS drixel.bootstrap_state (
+  key text PRIMARY KEY,
+  completed_at timestamptz NOT NULL DEFAULT now()
+);
+
 ALTER TABLE drixel.accounts DISABLE ROW LEVEL SECURITY;
 ALTER TABLE drixel.account_identities DISABLE ROW LEVEL SECURITY;
 ALTER TABLE drixel.account_emails DISABLE ROW LEVEL SECURITY;
