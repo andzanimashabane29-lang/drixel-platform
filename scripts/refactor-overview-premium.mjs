@@ -31,7 +31,7 @@ const replacement = `function Overview({ onNavigate, onOpenBusiness, onOpenServi
             <div className="mb-4 flex items-center gap-2">
               <StatusPill status={error ? 'error' : loading ? 'muted' : allHealthy ? 'healthy' : 'warning'} label={error ? 'Directory unavailable' : loading ? 'Checking directory' : allHealthy ? 'All systems healthy' : 'Review required'} />
             </div>
-            <h2 className="text-[28px] font-semibold tracking-[-.02em] text-foreground md:text-[32px]">{loading ? 'Reading your group directory' : error ? 'The group directory needs attention' : `${businessCount} businesses, ${serviceCount} services`}</h2>
+            <h2 className="text-[28px] font-semibold tracking-[-.02em] text-foreground md:text-[32px]">{loading ? 'Reading your group directory' : error ? 'The group directory needs attention' : businessCount + ' businesses, ' + serviceCount + ' services'}</h2>
             <p className="mt-3 max-w-xl text-[14px] leading-6 text-muted-foreground">{loading ? 'Current business and service records are being loaded.' : error ? 'Drixel could not read the current directory. Retry the connection or review directory settings.' : 'Your operating portfolio is connected and available from one administration workspace.'}</p>
           </div>
           <div className="flex flex-wrap gap-2">
