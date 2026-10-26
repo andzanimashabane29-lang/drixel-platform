@@ -13,9 +13,17 @@ services:
       - key: NODE_ENV
         value: production
       - key: REQUIRE_OIDC
-        value: "false"
+        value: "true"
       - key: MANAGED_STAGING
         value: "true"
+      - key: OIDC_ISSUER
+        value: https://dev-4pc3eomoyq8oy6o4.us.auth0.com/
+      - key: OIDC_AUDIENCE
+        value: https://api.drixel-platform
+      - key: OIDC_CLIENT_ID
+        value: KfBDY5K8I1cqv3dG4g4DMXoRaYRUCK0n
+      - key: OIDC_JWKS_URI
+        value: https://dev-4pc3eomoyq8oy6o4.us.auth0.com/.well-known/jwks.json
       - key: ADMIN_DATABASE_URL
         fromDatabase:
           name: drixel-platform-db-staging
