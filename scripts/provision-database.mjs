@@ -9,8 +9,9 @@ const required = (name) => {
 }
 
 const adminUrl = required('ADMIN_DATABASE_URL')
-const directoryPassword = required('POSTGRES_DIRECTORY_PASSWORD')
-const managementPassword = required('POSTGRES_MANAGEMENT_PASSWORD')
+const skipRoleLoginSetup = process.env.SKIP_ROLE_LOGIN_SETUP === 'true'
+const directoryPassword = skipRoleLoginSetup ? undefined : required('POSTGRES_DIRECTORY_PASSWORD')
+const managementPassword = skipRoleLoginSetup ? undefined : required('POSTGRES_MANAGEMENT_PASSWORD')
 const ssl = process.env.PGSSL === 'disable'
   ? undefined
   : { rejectUnauthorized: process.env.PGSSL_REJECT_UNAUTHORIZED !== 'false' }
@@ -59,11 +60,15 @@ const client = await pool.connect()
 try {
   await client.query('BEGIN')
   for (const file of sqlFiles) await runFile(client, file)
-  await setRolePassword(client, 'drixel_directory_reader', directoryPassword)
-  await setRolePassword(client, 'drixel_management_api', managementPassword)
+  if (skipRoleLoginSetup) {
+    console.log('Skipping database role login mutation for managed staging environment.')
+  } else {
+    await setRolePassword(client, 'drixel_directory_reader', directoryPassword)
+    await setRolePassword(client, 'drixel_management_api', managementPassword)
+  }
   await bootstrapOwner(client)
   await client.query('COMMIT')
-  console.log('Drixel production database provisioning completed successfully.')
+  console.log('Drixel database provisioning completed successfully.')
 } catch (error) {
   await client.query('ROLLBACK')
   console.error('Drixel database provisioning failed:', error?.message ?? error)
