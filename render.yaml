@@ -7,7 +7,6 @@ services:
     branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: sh -c "npm run db:provision && npm run start:api"
     healthCheckPath: /api/health
     autoDeployTrigger: checksPass
     envVars:
