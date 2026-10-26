@@ -40,4 +40,4 @@ replaceOnce(
 
 fs.writeFileSync(path, text)
 
-// Triggered after the component foundation was added.
+// Retry after dependency lockfile and component compile fixes.
