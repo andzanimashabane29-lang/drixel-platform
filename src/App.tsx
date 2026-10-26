@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { AdminShell } from './components/admin/AdminShell'
+import { PageHeader } from './components/admin/ui'
 
 type Section = 'Overview' | 'Businesses' | 'Services' | 'Accounts' | 'Access roles' | 'Audit log' | 'Settings'
 
@@ -96,7 +98,6 @@ function App() {
   const [route, setRoute] = useState<AppRoute>(() => routeFromPath(window.location.pathname))
   const section = route.section
   const [query, setQuery] = useState('')
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [accessToken, setAccessToken] = useState<string | undefined>(() => sessionStorage.getItem('drixel-access-token') ?? undefined)
   const [idToken, setIdToken] = useState<string | undefined>(() => sessionStorage.getItem('drixel-id-token') ?? undefined)
   const [authError, setAuthError] = useState('')
@@ -193,16 +194,9 @@ function App() {
     const handlePopState = () => {
       setRoute(routeFromPath(window.location.pathname))
       setQuery('')
-      setMobileNavOpen(false)
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
-
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMobileNavOpen(false) }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
   }, [])
 
   const businesses = useMemo<BusinessRow[]>(() => portfolio.businesses.map((business) => {
@@ -234,106 +228,66 @@ function App() {
     window.history.pushState(null, '', path)
     setRoute(nextRoute)
     setQuery('')
-    setMobileNavOpen(false)
   }
 
   const selectSection = (next: Section) => navigateTo(sectionPaths[next], { section: next })
   const openBusiness = (slug: string) => navigateTo(`/businesses/${encodeURIComponent(slug)}`, { section: 'Businesses', slug })
   const openService = (slug: string) => navigateTo(`/services/${encodeURIComponent(slug)}`, { section: 'Services', slug })
 
+  const navItems = sections.map((item) => ({
+    label: item,
+    href: sectionPaths[item],
+    active: section === item,
+    onClick: () => selectSection(item),
+  }))
+  const breadcrumbs = route.slug
+    ? [
+        { label: 'Drixel Labs Inc', onClick: () => selectSection('Overview') },
+        { label: section, onClick: () => selectSection(section) },
+        { label: selectedBusiness?.name ?? selectedService?.name ?? route.slug },
+      ]
+    : [{ label: 'Drixel Labs Inc', onClick: () => selectSection('Overview') }, { label: section }]
+
+  const signOut = () => {
+    setAccessToken(undefined)
+    setIdToken(undefined)
+    sessionStorage.removeItem('drixel-access-token')
+    sessionStorage.removeItem('drixel-id-token')
+    setAuthError('')
+  }
+  const signIn = () => {
+    if (oidcConfigured) void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.'))
+    else selectSection('Settings')
+  }
+
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${mobileNavOpen ? 'sidebar-open' : ''}`}>
-        <div className="brand-lockup" aria-label="Drixel Labs">
-          <span className="brand-name">DRIXEL</span>
-          <span className="brand-caption">LABS INC</span>
-        </div>
-        <div className="workspace-switcher" aria-label="Current workspace">
-          <span className="workspace-label">WORKSPACE</span>
-          <strong>Drixel Labs Inc</strong>
-          <span className="workspace-context">Group administration</span>
-        </div>
-        <nav id="group-navigation" className="main-nav" aria-label="Main navigation">
-          <span className="nav-label">GROUP ADMINISTRATION</span>
-          {sections.map((item) => (
-            <a
-              key={item}
-              href={sectionPaths[item]}
-              className={`nav-item ${section === item ? 'nav-item-active' : ''}`}
-              onClick={(event) => followSectionLink(event, () => selectSection(item))}
-              aria-current={section === item ? 'page' : undefined}
-              aria-label={`Open ${item} page`}
-            >
-              <span>{item}</span>
-            </a>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <button className="connection-row" onClick={() => selectSection('Settings')}><span className="connection-dot" />{oidcConfigured ? 'Identity provider configured' : 'Identity provider not connected'}</button>
-          <div className="sidebar-version">Drixel Platform · Foundation</div>
-        </div>
-      </aside>
-
-      {mobileNavOpen && <button className="nav-backdrop" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation" />}
-
-      <div className="main-column">
-        <header className="topbar">
-          <button className="mobile-menu" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-expanded={mobileNavOpen} aria-controls="group-navigation">Menu</button>
-          <div className="breadcrumb"><a href={sectionPaths.Overview} onClick={(event) => followSectionLink(event, () => selectSection('Overview'))}>Drixel Labs Inc</a><span className="breadcrumb-divider">/</span>{route.slug ? <><a href={sectionPaths[section]} onClick={(event) => followSectionLink(event, () => selectSection(section))}>{section}</a><span className="breadcrumb-divider">/</span><strong>{selectedBusiness?.name ?? selectedService?.name ?? route.slug}</strong></> : <strong>{section}</strong>}</div>
-          <div className="topbar-actions">
-            {showSearch && <div className="search-field">
-              <label className="search-label" htmlFor="portfolio-search">Search</label>
-              <input id="portfolio-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={section === 'Businesses' ? 'businesses' : section === 'Services' ? 'services' : 'portfolio'} />
-              {query && <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">Clear</button>}
-            </div>}
-            <div className="account-menu-wrap">
-              <button className="user-control" aria-label={accessToken ? 'Sign out' : 'Sign in'} onClick={() => {
-                if (accessToken) {
-                  setAccessToken(undefined)
-                  setIdToken(undefined)
-                  sessionStorage.removeItem('drixel-access-token')
-                  sessionStorage.removeItem('drixel-id-token')
-                  setAuthError('')
-                  return
-                }
-                if (oidcConfigured) void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.'))
-                else selectSection('Settings')
-              }}>
-                <span className="user-initials">{accessToken ? 'ID' : 'DL'}</span><span className="user-control-text">{accessToken ? 'Sign out' : oidcConfigured ? 'Sign in' : 'Set up sign-in'}</span>
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="page-content">
-          {section === 'Overview' && <Overview onNavigate={selectSection} onOpenBusiness={openBusiness} onOpenService={openService} onRetry={() => setDirectoryRefresh((value) => value + 1)} filteredBusinesses={filteredBusinesses} filteredServices={filteredServices} businessCount={businesses.length} activeBusinessCount={activeBusinessCount} serviceCount={services.length} activeServiceCount={activeServiceCount} loading={directoryLoading} error={directoryError} />}
-          {section === 'Businesses' && (route.slug
-            ? <BusinessDetailPage business={selectedBusiness} services={services.filter((service) => service.owner_slug === route.slug)} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Businesses')} onOpenService={openService} onNavigate={selectSection} />
-            : <BusinessesPage rows={filteredBusinesses} totalCount={businesses.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenBusiness={openBusiness} accessToken={accessToken} onPortfolioChanged={() => setDirectoryRefresh((value) => value + 1)} />)}
-          {section === 'Services' && (route.slug
-            ? <ServiceDetailPage service={selectedService} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Services')} onOpenBusiness={openBusiness} />
-            : <ServicesPage rows={filteredServices} totalCount={services.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenService={openService} onOpenBusiness={openBusiness} accessToken={accessToken} groupBusinesses={businesses} onPortfolioChanged={() => setDirectoryRefresh((value) => value + 1)} />)}
-          {section === 'Accounts' && <AccountsPage onNavigate={selectSection} accessToken={accessToken} idToken={idToken} businesses={businesses} services={services} acceptToken={route.acceptToken} onSignIn={() => { void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.')) }} authError={authError} />}
-          {section === 'Access roles' && <RolesPage />}
-          {section === 'Audit log' && <AuditPage accessToken={accessToken} onSignIn={() => { void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.')) }} />}
-          {section === 'Settings' && <SettingsPage businessCount={businesses.length} serviceCount={services.length} directoryConnected={!directoryLoading && !directoryError} authSubject={idToken ? String(readJwtPayload(idToken).sub ?? '') : ''} />}
-        </main>
-      </div>
-    </div>
+    <AdminShell
+      items={navItems}
+      breadcrumbs={breadcrumbs}
+      search={showSearch ? { value: query, placeholder: section === 'Businesses' ? 'Search businesses' : section === 'Services' ? 'Search services' : 'Search portfolio', onChange: setQuery } : undefined}
+      authenticated={Boolean(accessToken)}
+      oidcConfigured={oidcConfigured}
+      onSignIn={signIn}
+      onSignOut={signOut}
+      onSettings={() => selectSection('Settings')}
+    >
+      {section === 'Overview' && <Overview onNavigate={selectSection} onOpenBusiness={openBusiness} onOpenService={openService} onRetry={() => setDirectoryRefresh((value) => value + 1)} filteredBusinesses={filteredBusinesses} filteredServices={filteredServices} businessCount={businesses.length} activeBusinessCount={activeBusinessCount} serviceCount={services.length} activeServiceCount={activeServiceCount} loading={directoryLoading} error={directoryError} />}
+      {section === 'Businesses' && (route.slug
+        ? <BusinessDetailPage business={selectedBusiness} services={services.filter((service) => service.owner_slug === route.slug)} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Businesses')} onOpenService={openService} onNavigate={selectSection} />
+        : <BusinessesPage rows={filteredBusinesses} totalCount={businesses.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenBusiness={openBusiness} accessToken={accessToken} onPortfolioChanged={() => setDirectoryRefresh((value) => value + 1)} />)}
+      {section === 'Services' && (route.slug
+        ? <ServiceDetailPage service={selectedService} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onBack={() => selectSection('Services')} onOpenBusiness={openBusiness} />
+        : <ServicesPage rows={filteredServices} totalCount={services.length} loading={directoryLoading} error={directoryError} onRetry={() => setDirectoryRefresh((value) => value + 1)} onOpenService={openService} onOpenBusiness={openBusiness} accessToken={accessToken} groupBusinesses={businesses} onPortfolioChanged={() => setDirectoryRefresh((value) => value + 1)} />)}
+      {section === 'Accounts' && <AccountsPage onNavigate={selectSection} accessToken={accessToken} idToken={idToken} businesses={businesses} services={services} acceptToken={route.acceptToken} onSignIn={signIn} authError={authError} />}
+      {section === 'Access roles' && <RolesPage />}
+      {section === 'Audit log' && <AuditPage accessToken={accessToken} onSignIn={signIn} />}
+      {section === 'Settings' && <SettingsPage businessCount={businesses.length} serviceCount={services.length} directoryConnected={!directoryLoading && !directoryError} authSubject={idToken ? String(readJwtPayload(idToken).sub ?? '') : ''} />}
+    </AdminShell>
   )
 }
 
 function PageHeading({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
-  return (
-    <div className="page-heading">
-      <div>
-        <div className="eyebrow">{eyebrow}</div>
-        <h1>{title}</h1>
-        <p>{description}</p>
-      </div>
-      {action && <div className="heading-action">{action}</div>}
-    </div>
-  )
+  return <PageHeader eyebrow={eyebrow} title={title} description={description} action={action} />
 }
 
 function Overview({ onNavigate, onOpenBusiness, onOpenService, onRetry, filteredBusinesses, filteredServices, businessCount, activeBusinessCount, serviceCount, activeServiceCount, loading, error }: { onNavigate: (section: Section) => void; onOpenBusiness: (slug: string) => void; onOpenService: (slug: string) => void; onRetry: () => void; filteredBusinesses: BusinessRow[]; filteredServices: Service[]; businessCount: number; activeBusinessCount: number; serviceCount: number; activeServiceCount: number; loading: boolean; error: boolean }) {
