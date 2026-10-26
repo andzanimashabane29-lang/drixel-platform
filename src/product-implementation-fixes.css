@@ -1,0 +1,145 @@
+/* Drixel Product System — implementation corrections only.
+   This file fixes browser/layout defects that should not be part of visual theming. */
+
+body:not(.ecosystem-page),
+body:not(.ecosystem-page) button,
+body:not(.ecosystem-page) input,
+body:not(.ecosystem-page) select,
+body:not(.ecosystem-page) textarea {
+  font-family: "Bahnschrift", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif !important;
+  font-stretch: normal;
+}
+
+/* Accessibility labels must never become visible table text. */
+body:not(.ecosystem-page) .visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Keep the toolbar from clipping search/account controls. */
+body:not(.ecosystem-page) .topbar {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  overflow: visible !important;
+}
+body:not(.ecosystem-page) .topbar-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+body:not(.ecosystem-page) .search-field {
+  flex: 0 1 252px !important;
+  width: 252px !important;
+  max-width: min(32vw, 252px) !important;
+  overflow: hidden !important;
+}
+body:not(.ecosystem-page) .search-field input {
+  min-width: 0 !important;
+  width: 100% !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body:not(.ecosystem-page) .user-control {
+  flex: 0 0 auto !important;
+  min-width: max-content !important;
+}
+
+/* Inline business/service editor. */
+body:not(.ecosystem-page) .portfolio-management .data-table {
+  table-layout: fixed !important;
+}
+body:not(.ecosystem-page) .portfolio-management .data-table td {
+  position: relative !important;
+  vertical-align: middle !important;
+}
+body:not(.ecosystem-page) .portfolio-row-input,
+body:not(.ecosystem-page) .portfolio-row-select {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+body:not(.ecosystem-page) .portfolio-management .data-table td:nth-child(3) .button {
+  min-width: 112px !important;
+}
+
+/* Pagination should read like one compact system control, not loose HTML. */
+body:not(.ecosystem-page) .directory-pagination {
+  min-height: 70px !important;
+  padding: 12px 16px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) auto !important;
+  align-items: center !important;
+  gap: 16px !important;
+  border-top: 1px solid var(--ui-border) !important;
+  background: #fff !important;
+}
+body:not(.ecosystem-page) .directory-pagination > p {
+  margin: 0 !important;
+  color: var(--ui-tertiary) !important;
+  font-size: 10.5px !important;
+}
+body:not(.ecosystem-page) .pagination-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+}
+body:not(.ecosystem-page) .page-size-control {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  white-space: nowrap !important;
+}
+body:not(.ecosystem-page) .page-size-control select {
+  width: 64px !important;
+  min-width: 64px !important;
+}
+body:not(.ecosystem-page) .pagination-actions > span {
+  min-width: 58px !important;
+  text-align: center !important;
+  color: var(--ui-tertiary) !important;
+  font-size: 10px !important;
+}
+body:not(.ecosystem-page) .directory-pagination .button {
+  min-width: 76px !important;
+  min-height: 34px !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: 9px !important;
+  background: #f5f5f7 !important;
+  color: var(--ui-text) !important;
+  box-shadow: none !important;
+}
+body:not(.ecosystem-page) .directory-pagination .button:not(:disabled):hover {
+  background: #ebebee !important;
+}
+body:not(.ecosystem-page) .directory-pagination .button:disabled {
+  opacity: .38 !important;
+}
+
+/* Settings spacing and code values. */
+body:not(.ecosystem-page) .settings-row > div {
+  justify-content: center !important;
+}
+body:not(.ecosystem-page) .settings-note {
+  line-height: 1.6 !important;
+}
+
+@media (max-width: 900px) {
+  body:not(.ecosystem-page) .search-field { width: 210px !important; max-width: 28vw !important; }
+  body:not(.ecosystem-page) .directory-pagination { grid-template-columns: 1fr !important; }
+  body:not(.ecosystem-page) .pagination-actions { justify-content: flex-start !important; flex-wrap: wrap !important; }
+}
