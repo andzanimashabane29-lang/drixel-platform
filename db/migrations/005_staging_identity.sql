@@ -113,6 +113,16 @@ CREATE TABLE IF NOT EXISTS drixel.invitations (
   accepted_at timestamptz
 );
 
+ALTER TABLE drixel.accounts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.account_identities DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.account_emails DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.organization_memberships DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.application_memberships DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.roles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.role_assignments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.audit_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.invitations DISABLE ROW LEVEL SECURITY;
+
 INSERT INTO drixel.roles (scope, code, display_name, description) VALUES
   ('group','group_owner','Group owner','Full group governance access'),
   ('group','group_admin','Group administrator','Manage group settings and portfolio'),
@@ -123,13 +133,3 @@ INSERT INTO drixel.roles (scope, code, display_name, description) VALUES
   ('application','support_agent','Support agent','Support users of one application'),
   ('application','end_user','End user','Use the assigned application')
 ON CONFLICT (scope, code) DO UPDATE SET display_name=EXCLUDED.display_name, description=EXCLUDED.description;
-
-ALTER TABLE drixel.accounts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drixel.account_identities DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drixel.account_emails DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drixel.organization_memberships DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drixel.application_memberships DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drixel.roles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drixel.role_assignments DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drixel.audit_events DISABLE ROW LEVEL SECURITY;
-ALTER TABLE drixel.invitations DISABLE ROW LEVEL SECURITY;
