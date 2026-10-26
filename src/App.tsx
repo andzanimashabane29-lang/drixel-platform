@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { AdminShell } from './components/admin/AdminShell'
-import { PageHeader } from './components/admin/ui'
+import { Button, EmptyState, PageHeader, SectionCard, SectionHeader, StatStrip, StatusPill, TableRowLink } from './components/admin/ui'
 
 type Section = 'Overview' | 'Businesses' | 'Services' | 'Accounts' | 'Access roles' | 'Audit log' | 'Settings'
 
@@ -291,76 +291,78 @@ function PageHeading({ eyebrow, title, description, action }: { eyebrow: string;
 }
 
 function Overview({ onNavigate, onOpenBusiness, onOpenService, onRetry, filteredBusinesses, filteredServices, businessCount, activeBusinessCount, serviceCount, activeServiceCount, loading, error }: { onNavigate: (section: Section) => void; onOpenBusiness: (slug: string) => void; onOpenService: (slug: string) => void; onRetry: () => void; filteredBusinesses: BusinessRow[]; filteredServices: Service[]; businessCount: number; activeBusinessCount: number; serviceCount: number; activeServiceCount: number; loading: boolean; error: boolean }) {
-  const totalValue = (count: number) => loading ? '…' : error ? 'Unavailable' : String(count)
+  const totalValue = (count: number) => loading ? '—' : error ? 'Unavailable' : String(count)
+  const allHealthy = !loading && !error && activeBusinessCount === businessCount && activeServiceCount === serviceCount
 
   return (
-    <>
-      <PageHeading eyebrow="DRIXEL LABS INC  /  GROUP ADMINISTRATION" title="Portfolio overview" description="A live register of the businesses and services connected to the group." />
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Group administration"
+        title="Drixel Labs Inc"
+        description="Manage the businesses, services and access that make up the Drixel group."
+        action={<Button variant="secondary" onClick={onRetry}>{error ? 'Retry directory' : 'Refresh directory'}</Button>}
+      />
 
-      <section className={`status-banner ${error ? 'status-banner-error' : loading ? 'status-banner-loading' : 'status-banner-connected'}`} role="status">
-        <div className="status-copy">
-          <span className="status-kicker">DIRECTORY STATUS</span>
-          <strong>{loading ? 'Connecting to the group directory' : error ? 'Directory connection unavailable' : 'Group directory is connected'}</strong>
-          <p>{loading ? 'Loading current business and service records.' : error ? 'Check that Docker and the API are running, then retry.' : 'Business and service records are being read from the Drixel directory.'}</p>
+      <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface">
+        <div className="flex flex-col gap-6 px-6 py-7 md:flex-row md:items-end md:justify-between md:px-8 md:py-8">
+          <div className="max-w-2xl">
+            <div className="mb-4 flex items-center gap-2">
+              <StatusPill status={error ? 'error' : loading ? 'muted' : allHealthy ? 'healthy' : 'warning'} label={error ? 'Directory unavailable' : loading ? 'Checking directory' : allHealthy ? 'All systems healthy' : 'Review required'} />
+            </div>
+            <h2 className="text-[28px] font-semibold tracking-[-.02em] text-foreground md:text-[32px]">{loading ? 'Reading your group directory' : error ? 'The group directory needs attention' : businessCount + ' businesses, ' + serviceCount + ' services'}</h2>
+            <p className="mt-3 max-w-xl text-[14px] leading-6 text-muted-foreground">{loading ? 'Current business and service records are being loaded.' : error ? 'Drixel could not read the current directory. Retry the connection or review directory settings.' : 'Your operating portfolio is connected and available from one administration workspace.'}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => onNavigate('Businesses')}>View businesses</Button>
+            <Button variant="primary" onClick={() => onNavigate('Services')}>View services</Button>
+          </div>
         </div>
-        <div className="status-actions">
-          <button className="button button-secondary" onClick={onRetry}>{error ? 'Retry connection' : 'Refresh directory'}</button>
-          <button className="button button-quiet" onClick={() => onNavigate('Settings')}>Directory settings</button>
+        <div className="border-t border-border">
+          <StatStrip items={[
+            { label: 'Businesses', value: totalValue(businessCount), detail: 'Registered group units' },
+            { label: 'Active businesses', value: totalValue(activeBusinessCount), detail: 'Currently operating' },
+            { label: 'Services', value: totalValue(serviceCount), detail: 'Products and shared services' },
+            { label: 'Active services', value: totalValue(activeServiceCount), detail: 'Currently available' },
+          ]} />
         </div>
       </section>
 
-      <section className="metric-grid" aria-label="Live portfolio summary">
-        <Metric label="Businesses" value={totalValue(businessCount)} detail="Registered group units" onClick={() => onNavigate('Businesses')} />
-        <Metric label="Active businesses" value={totalValue(activeBusinessCount)} detail={error ? 'Unavailable' : 'Currently active'} />
-        <Metric label="Services" value={totalValue(serviceCount)} detail="Products and shared services" onClick={() => onNavigate('Services')} />
-        <Metric label="Active services" value={totalValue(activeServiceCount)} detail={error ? 'Unavailable' : 'Currently active'} />
-      </section>
-
-      <div className="overview-grid">
-        <section className="content-panel overview-businesses">
-          <div className="panel-heading">
-            <div><h2>Businesses</h2><p>Operating units registered under Drixel Labs Inc.</p></div>
-            <a className="text-button" href={sectionPaths.Businesses} onClick={(event) => followSectionLink(event, () => onNavigate('Businesses'))}>All businesses <span aria-hidden="true">→</span></a>
-          </div>
-          <BusinessTable rows={filteredBusinesses} compact onOpenBusiness={onOpenBusiness} />
-        </section>
-
-        <section className="content-panel overview-services">
-          <div className="panel-heading">
-            <div><h2>Services</h2><p>Products and shared group services.</p></div>
-            <a className="text-button" href={sectionPaths.Services} onClick={(event) => followSectionLink(event, () => onNavigate('Services'))}>All services <span aria-hidden="true">→</span></a>
-          </div>
-          <div className="service-summary-list">
-            {filteredServices.slice(0, 5).map((service) => (
-              <div className="service-summary-row" key={service.slug}>
-                <a href={`/services/${encodeURIComponent(service.slug)}`} onClick={(event) => followSectionLink(event, () => onOpenService(service.slug))}><strong>{service.name}</strong></a>
-                <a href={`/businesses/${encodeURIComponent(service.owner_slug)}`} onClick={(event) => followSectionLink(event, () => onOpenBusiness(service.owner_slug))}>{service.owner_name}</a>
-                <span className="service-type">{statusLabel(service.status)}</span>
-              </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]">
+        <SectionCard>
+          <SectionHeader title="Businesses" description="Operating units registered under Drixel Labs Inc." action={<Button variant="ghost" onClick={() => onNavigate('Businesses')}>View all</Button>} />
+          {filteredBusinesses.length ? <div className="divide-y divide-border">
+            {filteredBusinesses.slice(0, 6).map((business) => (
+              <button key={business.id} type="button" onClick={() => onOpenBusiness(business.slug)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 text-left hover:bg-surface-hover focus-visible:bg-surface-hover md:grid-cols-[minmax(0,1.2fr)_minmax(140px,.6fr)_auto]">
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-subtle text-[12px] font-semibold text-muted-foreground">{business.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="min-w-0"><span className="block truncate text-[14px] font-medium text-foreground"><TableRowLink>{business.name}</TableRowLink></span><span className="mt-0.5 block truncate text-[12px] text-tertiary-foreground">{business.services}</span></span>
+                </span>
+                <span className="hidden text-[12px] text-muted-foreground md:block">{business.category}</span>
+                <StatusPill status={business.status === 'active' ? 'active' : business.status === 'suspended' ? 'warning' : 'muted'} label={statusLabel(business.status)} />
+              </button>
             ))}
-            {!loading && filteredServices.length === 0 && <div className="empty-table">{error ? 'Services are unavailable while the directory is disconnected.' : 'No services match this search.'}</div>}
-          </div>
-        </section>
+          </div> : <EmptyState title={error ? 'Businesses are unavailable' : 'No businesses found'} description={error ? 'Retry the directory connection to load businesses.' : 'No businesses match the current search.'} action={error ? <Button variant="secondary" onClick={onRetry}>Retry</Button> : undefined} />}
+        </SectionCard>
+
+        <SectionCard>
+          <SectionHeader title="Services" description="Products and shared group services." action={<Button variant="ghost" onClick={() => onNavigate('Services')}>View all</Button>} />
+          {filteredServices.length ? <div className="divide-y divide-border">
+            {filteredServices.slice(0, 6).map((service) => (
+              <button key={service.id} type="button" onClick={() => onOpenService(service.slug)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-surface-hover focus-visible:bg-surface-hover">
+                <span className="min-w-0"><span className="block truncate text-[14px] font-medium text-foreground">{service.name}</span><span className="mt-0.5 block truncate text-[12px] text-tertiary-foreground">{service.owner_name}</span></span>
+                <StatusPill status={service.status === 'active' ? 'active' : service.status === 'suspended' ? 'warning' : 'muted'} label={statusLabel(service.status)} />
+              </button>
+            ))}
+          </div> : <EmptyState title={error ? 'Services are unavailable' : 'No services found'} description={error ? 'Retry the directory connection to load services.' : 'No services match the current search.'} action={error ? <Button variant="secondary" onClick={onRetry}>Retry</Button> : undefined} />}
+        </SectionCard>
       </div>
 
-      <section className="readiness-panel">
-        <div className="readiness-copy">
-          <span className="eyebrow">IDENTITY AND ACCESS</span>
-          <h2>Account administration is not connected</h2>
-          <p>Drixel ID and an authenticated management API are required before this console can list accounts, invite users, or change permissions.</p>
-        </div>
-        <button className="button button-secondary" onClick={() => onNavigate('Settings')}>Review setup</button>
-      </section>
-      <footer className="page-footer">Portfolio changes are restricted to group administrators. Account and access data remain protected until identity services are configured.</footer>
-    </>
+      <div className="flex flex-col gap-3 border-t border-border pt-6 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <span>Portfolio changes are restricted to authorized group administrators.</span>
+        <Button variant="ghost" onClick={() => onNavigate('Settings')}>Review group settings</Button>
+      </div>
+    </div>
   )
-}
-
-function Metric({ label, value, detail, onClick }: { label: string; value: string; detail: string; onClick?: () => void }) {
-  const content = <><span className="metric-label">{label}</span><strong className="metric-value">{value}</strong><span className="metric-detail">{detail}</span></>
-  return onClick
-    ? <button type="button" className="metric-card metric-card-button" onClick={onClick}>{content}<span className="metric-arrow" aria-hidden="true">→</span></button>
-    : <div className="metric-card">{content}</div>
 }
 
 function DirectoryNotice({ loading, error, onRetry }: { loading: boolean; error: boolean; onRetry: () => void }) {
