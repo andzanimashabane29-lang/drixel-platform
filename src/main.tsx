@@ -1,11 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import '@fontsource-variable/inter'
 import App from './App'
 import Ecosystem from './Ecosystem'
 import './styles.css'
 import './ecosystem.css'
-import './product-system.css'
-import './product-implementation-fixes.css'
+import './theme.css'
 
 // Auth0 redirects away from the application and then back to /auth/callback.
 // Some browser/privacy configurations can lose sessionStorage during that
@@ -63,12 +63,12 @@ function callbackDiagnostic() {
 
 function AuthCallbackFailure({ message }: { message: string }) {
   return (
-    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'Bahnschrift, "Segoe UI Variable", "Segoe UI", sans-serif', background: '#f7f7f8', color: '#171719' }}>
-      <section style={{ width: 'min(620px, 100%)', background: '#fff', border: '1px solid #e1e1e5', borderRadius: 14, padding: 32 }}>
-        <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: '#85868c' }}>Drixel ID</p>
-        <h1 style={{ margin: '0 0 16px', fontSize: 28, fontWeight: 600, letterSpacing: '-.02em' }}>Sign-in callback failed</h1>
-        <p style={{ margin: '0 0 22px', lineHeight: 1.6, color: '#5f6065' }}>{message}</p>
-        <a href="/accounts" style={{ display: 'inline-block', padding: '11px 16px', borderRadius: 9, background: '#202124', color: '#fff', textDecoration: 'none', fontWeight: 600 }}>Start a fresh sign-in</a>
+    <main className="grid min-h-screen place-items-center bg-background p-6 text-foreground">
+      <section className="w-full max-w-[620px] rounded-[var(--radius-card)] border border-border bg-surface p-8">
+        <p className="mb-2 text-[12px] font-medium text-muted-foreground">Drixel ID</p>
+        <h1 className="mb-4 text-[28px] font-semibold tracking-[-.02em]">Sign-in callback failed</h1>
+        <p className="mb-6 leading-6 text-muted-foreground">{message}</p>
+        <a href="/accounts" className="inline-flex h-9 items-center rounded-[var(--radius-control)] bg-foreground px-4 text-[13px] font-medium text-background">Start a fresh sign-in</a>
       </section>
     </main>
   )
