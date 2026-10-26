@@ -5,6 +5,7 @@ import Ecosystem from './Ecosystem'
 import './styles.css'
 import './ecosystem.css'
 import './os-shell.css'
+import './final-polish.css'
 
 const isEcosystemHome = window.location.pathname === '/'
 if (isEcosystemHome) document.body.classList.add('ecosystem-page')
