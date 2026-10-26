@@ -3,6 +3,7 @@ import { createApiServer } from './app.js'
 import { createOidcVerifier } from './oidc.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
+const requireOidc = process.env.REQUIRE_OIDC !== 'false'
 const sslMode = process.env.PGSSL ?? (isProduction ? 'require' : 'disable')
 const ssl = sslMode === 'require'
   ? { rejectUnauthorized: process.env.PGSSL_REJECT_UNAUTHORIZED !== 'false' }
@@ -21,15 +22,13 @@ const directoryDatabaseUrl = process.env.DIRECTORY_DATABASE_URL
 const managementDatabaseUrl = process.env.MANAGEMENT_DATABASE_URL
   ?? deriveRoleConnection(process.env.ADMIN_DATABASE_URL, 'drixel_management_api', process.env.POSTGRES_MANAGEMENT_PASSWORD)
 
-const requiredProduction = [
-  'OIDC_ISSUER',
-  'OIDC_AUDIENCE',
-  'OIDC_CLIENT_ID',
-  'OIDC_JWKS_URI',
-]
-
 if (isProduction) {
-  const missing = requiredProduction.filter((name) => !process.env[name])
+  const missing = []
+  if (requireOidc) {
+    for (const name of ['OIDC_ISSUER', 'OIDC_AUDIENCE', 'OIDC_CLIENT_ID', 'OIDC_JWKS_URI']) {
+      if (!process.env[name]) missing.push(name)
+    }
+  }
   if (!directoryDatabaseUrl && !process.env.PGPASSWORD) missing.push('DIRECTORY_DATABASE_URL or ADMIN_DATABASE_URL + POSTGRES_DIRECTORY_PASSWORD')
   if (!managementDatabaseUrl && !process.env.PGMANAGEMENTPASSWORD) missing.push('MANAGEMENT_DATABASE_URL or ADMIN_DATABASE_URL + POSTGRES_MANAGEMENT_PASSWORD')
   if (missing.length) {
