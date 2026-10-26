@@ -20,13 +20,14 @@ const ssl = process.env.PGSSL === 'disable'
 const pool = new Pool({ connectionString: adminUrl, ssl, max: 1, application_name: 'drixel-db-provisioner' })
 const root = process.cwd()
 
-const coreSqlFiles = [
-  'db/migrations/001_initial.sql',
-  'db/seed/001_portfolio.sql',
+const stagingSqlFiles = [
+  'db/migrations/000_staging_portfolio.sql',
+  'db/seed/001_portfolio_staging.sql',
 ]
 
 const productionSqlFiles = [
-  ...coreSqlFiles,
+  'db/migrations/001_initial.sql',
+  'db/seed/001_portfolio.sql',
   'db/migrations/002_directory_reader.sql',
   'db/migrations/003_identity_management.sql',
   'db/migrations/004_portfolio_management.sql',
@@ -65,9 +66,9 @@ async function bootstrapOwner(client) {
 const client = await pool.connect()
 try {
   await client.query('BEGIN')
-  const sqlFiles = managedStaging ? coreSqlFiles : productionSqlFiles
+  const sqlFiles = managedStaging ? stagingSqlFiles : productionSqlFiles
   console.log(managedStaging
-    ? 'Provisioning managed staging database with core schema only.'
+    ? 'Provisioning managed staging portfolio schema.'
     : 'Provisioning full production database schema.')
   for (const file of sqlFiles) await runFile(client, file)
 
