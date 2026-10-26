@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "start:api": "node server/index.js",
+    "db:provision": "node scripts/provision-database.mjs",
     "test:api": "node --test server/*.test.js"
   },
   "dependencies": {
