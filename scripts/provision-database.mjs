@@ -47,20 +47,12 @@ async function setRolePassword(client, role, password) {
 }
 
 async function bootstrapOwner(client) {
-  const email = process.env.OIDC_BOOTSTRAP_ADMIN_EMAIL
-  const name = process.env.OIDC_BOOTSTRAP_ADMIN_NAME
-  const issuer = process.env.OIDC_ISSUER
   const subject = process.env.OIDC_BOOTSTRAP_ADMIN_SUBJECT
-  const provided = [email, name, issuer, subject].filter(Boolean).length
+  if (!subject) return
 
-  if (provided === 0) return
-  if (provided !== 4) {
-    if (managedStaging) {
-      console.warn('Skipping owner bootstrap in managed staging because bootstrap configuration is incomplete.')
-      return
-    }
-    throw new Error('Set OIDC_BOOTSTRAP_ADMIN_EMAIL, OIDC_BOOTSTRAP_ADMIN_NAME, OIDC_ISSUER and OIDC_BOOTSTRAP_ADMIN_SUBJECT together')
-  }
+  const issuer = required('OIDC_ISSUER')
+  const name = process.env.OIDC_BOOTSTRAP_ADMIN_NAME || 'Drixel Labs Group Owner'
+  const email = process.env.OIDC_BOOTSTRAP_ADMIN_EMAIL || ''
 
   await client.query("SELECT set_config('drixel.bootstrap_email', $1, false)", [email])
   await client.query("SELECT set_config('drixel.bootstrap_name', $1, false)", [name])
