@@ -245,7 +245,7 @@ export function createApiServer(query, options = {}) {
     if (pathname === '/api/portfolio/manage-access' && request.method === 'GET') {
       let claims
       try { claims = await authenticate(request) }
-      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      catch (error) { return sendJson(response, 401, { error: error instanceof AuthenticationError ? error.message : 'Authentication required' }) }
       try {
         const result = await managementQuery(portfolioAdministratorQuery(), [claims.iss, claims.sub])
         if (!result.rows[0]) return sendJson(response, 403, { error: 'Group administrator access is required' })
@@ -263,7 +263,7 @@ export function createApiServer(query, options = {}) {
       || (businessRecord && request.method === 'PATCH') || (serviceRecord && request.method === 'PATCH')) {
       let claims
       try { claims = await authenticate(request) }
-      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      catch (error) { return sendJson(response, 401, { error: error instanceof AuthenticationError ? error.message : 'Authentication required' }) }
       let body
       try { body = await readJson(request) }
       catch (error) { return sendJson(response, 400, { error: error.message }) }
@@ -347,7 +347,7 @@ export function createApiServer(query, options = {}) {
     if (request.method === 'GET' && pathname === '/api/accounts') {
       let claims
       try { claims = await authenticate(request) }
-      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      catch (error) { return sendJson(response, 401, { error: error instanceof AuthenticationError ? error.message : 'Authentication required' }) }
       try {
         const result = await managementQuery(accountsQuery(), [claims.iss, claims.sub])
         const row = result.rows[0]
@@ -362,7 +362,7 @@ export function createApiServer(query, options = {}) {
     if (request.method === 'PATCH' && accountAccess) {
       let claims
       try { claims = await authenticate(request) }
-      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      catch (error) { return sendJson(response, 401, { error: error instanceof AuthenticationError ? error.message : 'Authentication required' }) }
       let body
       try { body = await readJson(request) }
       catch (error) { return sendJson(response, 400, { error: error.message }) }
@@ -476,7 +476,7 @@ export function createApiServer(query, options = {}) {
     if (request.method === 'GET' && pathname === '/api/audit-log') {
       let claims
       try { claims = await authenticate(request) }
-      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      catch (error) { return sendJson(response, 401, { error: error instanceof AuthenticationError ? error.message : 'Authentication required' }) }
       try {
         const result = await managementQuery(auditQuery(), [claims.iss, claims.sub])
         const row = result.rows[0]
@@ -490,7 +490,7 @@ export function createApiServer(query, options = {}) {
     if (request.method === 'POST' && pathname === '/api/invitations') {
       let claims
       try { claims = await authenticate(request) }
-      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      catch (error) { return sendJson(response, 401, { error: error instanceof AuthenticationError ? error.message : 'Authentication required' }) }
       let body
       try { body = await readJson(request) }
       catch (error) { return sendJson(response, 400, { error: error.message }) }
@@ -610,7 +610,7 @@ export function createApiServer(query, options = {}) {
     if (request.method === 'POST' && pathname === '/api/invitations/accept') {
       let claims
       try { claims = await authenticate(request) }
-      catch { return sendJson(response, 401, { error: 'Authentication required' }) }
+      catch (error) { return sendJson(response, 401, { error: error instanceof AuthenticationError ? error.message : 'Authentication required' }) }
       let body
       try { body = await readJson(request) }
       catch (error) { return sendJson(response, 400, { error: error.message }) }
