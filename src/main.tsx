@@ -5,6 +5,7 @@ import Ecosystem from './Ecosystem'
 import './styles.css'
 import './ecosystem.css'
 import './product-system.css'
+import './product-implementation-fixes.css'
 
 // Auth0 redirects away from the application and then back to /auth/callback.
 // Some browser/privacy configurations can lose sessionStorage during that
@@ -62,7 +63,7 @@ function callbackDiagnostic() {
 
 function AuthCallbackFailure({ message }: { message: string }) {
   return (
-    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'Roboto, Arial, sans-serif', background: '#f7f7f8', color: '#171719' }}>
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'Bahnschrift, "Segoe UI Variable", "Segoe UI", sans-serif', background: '#f7f7f8', color: '#171719' }}>
       <section style={{ width: 'min(620px, 100%)', background: '#fff', border: '1px solid #e1e1e5', borderRadius: 14, padding: 32 }}>
         <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: '#85868c' }}>Drixel ID</p>
         <h1 style={{ margin: '0 0 16px', fontSize: 28, fontWeight: 600, letterSpacing: '-.02em' }}>Sign-in callback failed</h1>
