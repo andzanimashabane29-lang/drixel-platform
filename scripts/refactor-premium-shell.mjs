@@ -12,7 +12,7 @@ function replaceOnce(from, to, label) {
 
 replaceOnce(
   `import { useEffect, useMemo, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'\n`,
-  `import { useEffect, useMemo, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'\nimport { AdminShell } from './components/admin/AdminShell'\nimport { Button, EmptyState, PageHeader, SectionCard, SectionHeader, Skeleton, StatStrip, StatusPill } from './components/admin/ui'\n`,
+  `import { useEffect, useMemo, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'\nimport { AdminShell } from './components/admin/AdminShell'\nimport { PageHeader } from './components/admin/ui'\n`,
   'App imports',
 )
 
@@ -39,3 +39,5 @@ replaceOnce(
 )
 
 fs.writeFileSync(path, text)
+
+// Triggered after the component foundation was added.
