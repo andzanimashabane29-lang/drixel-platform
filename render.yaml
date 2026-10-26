@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: drixel-platform-api-staging
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: sh -c "npm run db:provision && npm run start:api"
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REQUIRE_OIDC
+        value: "false"
+      - key: ADMIN_DATABASE_URL
+        fromDatabase:
+          name: drixel-platform-db-staging
+          property: connectionString
+      - key: POSTGRES_DIRECTORY_PASSWORD
+        generateValue: true
+      - key: POSTGRES_MANAGEMENT_PASSWORD
+        generateValue: true
+      - key: PGSSL
+        value: require
+      - key: PGSSL_REJECT_UNAUTHORIZED
+        value: "false"
+      - key: PGPOOL_MAX
+        value: "5"
+      - key: PGCONNECT_TIMEOUT_MS
+        value: "5000"
+      - key: PGIDLE_TIMEOUT_MS
+        value: "30000"
+
+databases:
+  - name: drixel-platform-db-staging
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "17"
+    databaseName: drixel_platform
+    user: drixel_admin
+    ipAllowList: []
