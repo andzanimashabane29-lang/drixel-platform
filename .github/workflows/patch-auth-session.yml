@@ -1,4 +1,4 @@
-# One-shot session persistence migration
+# One-shot session persistence migration v2
 name: Patch auth session persistence
 
 on:
@@ -21,7 +21,7 @@ jobs:
           p = Path('src/App.tsx')
           s = p.read_text()
           old = "  const [accessToken, setAccessToken] = useState<string>()\n  const [idToken, setIdToken] = useState<string>()"
-          new = "  const [accessToken, setAccessToken] = useState<string>(() => sessionStorage.getItem('drixel-access-token') ?? undefined)\n  const [idToken, setIdToken] = useState<string>(() => sessionStorage.getItem('drixel-id-token') ?? undefined)"
+          new = "  const [accessToken, setAccessToken] = useState<string | undefined>(() => sessionStorage.getItem('drixel-access-token') ?? undefined)\n  const [idToken, setIdToken] = useState<string | undefined>(() => sessionStorage.getItem('drixel-id-token') ?? undefined)"
           assert old in s, 'token state initializer not found'
           s = s.replace(old, new, 1)
 
