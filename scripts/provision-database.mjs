@@ -23,6 +23,7 @@ const root = process.cwd()
 const stagingSqlFiles = [
   'db/migrations/000_staging_portfolio.sql',
   'db/seed/001_portfolio_staging.sql',
+  'db/migrations/005_staging_identity.sql',
 ]
 
 const productionSqlFiles = [
@@ -68,7 +69,7 @@ try {
   await client.query('BEGIN')
   const sqlFiles = managedStaging ? stagingSqlFiles : productionSqlFiles
   console.log(managedStaging
-    ? 'Provisioning managed staging portfolio schema.'
+    ? 'Provisioning managed staging portfolio and identity schema.'
     : 'Provisioning full production database schema.')
   for (const file of sqlFiles) await runFile(client, file)
 
