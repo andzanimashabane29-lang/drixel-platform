@@ -1,42 +1,32 @@
 const products = [
   {
     name: 'Drixel SA',
-    label: 'Fashion & commerce',
-    description: 'Shop, orders, customer experiences and the Drixel SA brand ecosystem.',
+    label: 'Commerce',
+    description: 'Fashion, customer experience, orders and retail operations.',
     href: 'https://drixelsa.co.za',
-    mark: 'DS',
     state: 'Live',
   },
   {
     name: 'Excel Tutoring Academy SA',
     label: 'Education',
-    description: 'Learning, live classes, resources and student access in one education workspace.',
+    description: 'Learning, live classes, resources and student access.',
     href: 'https://exceltutoringacademysa.co.za',
-    mark: 'EX',
     state: 'Platform',
   },
   {
     name: 'DrixelOne',
     label: 'Technology',
-    description: 'The shared technology layer connecting Drixel products, data and digital services.',
+    description: 'Shared technology, data and digital infrastructure for the group.',
     href: '/services',
-    mark: 'D1',
-    state: 'Building',
+    state: 'In development',
   },
   {
     name: 'A-Chatz',
     label: 'Communication',
-    description: 'Messaging, communities, channels, stories and intelligent collaboration.',
+    description: 'Messaging, communities, channels and collaboration.',
     href: '/services',
-    mark: 'AC',
-    state: 'Building',
+    state: 'In development',
   },
-]
-
-const capabilities = [
-  ['One identity', 'Use Drixel ID as the common identity layer across approved Drixel products.'],
-  ['Scoped access', 'Business and service permissions stay separate, auditable and intentional.'],
-  ['One ecosystem', 'Move between Drixel businesses without the platform feeling like disconnected websites.'],
 ]
 
 export default function Ecosystem() {
@@ -44,114 +34,96 @@ export default function Ecosystem() {
     <div className="ecosystem-shell">
       <header className="ecosystem-nav">
         <a className="ecosystem-brand" href="/" aria-label="Drixel Accounts home">
-          <span className="ecosystem-brand-word">DRIXEL</span>
-          <span className="ecosystem-brand-sub">ACCOUNTS</span>
+          <span>DRIXEL</span>
+          <small>LABS INC</small>
         </a>
         <nav className="ecosystem-nav-links" aria-label="Ecosystem navigation">
-          <a href="#products">Products</a>
-          <a href="#identity">Identity</a>
+          <a href="#group">Group</a>
+          <a href="#identity">Drixel ID</a>
           <a href="/overview">Administration</a>
         </nav>
-        <a className="ecosystem-signin" href="/accounts">Open account</a>
+        <a className="ecosystem-signin" href="/accounts">Sign in</a>
       </header>
 
       <main>
         <section className="ecosystem-hero">
           <div className="ecosystem-hero-copy">
-            <span className="ecosystem-kicker">DRIXEL LABS INC · ONE ACCOUNT</span>
-            <h1>One secure account for the Drixel ecosystem.</h1>
+            <span className="ecosystem-kicker">DRIXEL ACCOUNTS</span>
+            <h1>One account.<br />Across Drixel.</h1>
             <p>
-              Drixel Accounts is the identity and access home for Drixel Labs products — built to connect commerce,
-              education, technology and communication without turning them into one confusing application.
+              A shared identity layer for Drixel Labs businesses and products. Sign in once, then access only the services and workspaces assigned to you.
             </p>
             <div className="ecosystem-hero-actions">
-              <a className="ecosystem-primary" href="/accounts">Sign in with Drixel ID</a>
-              <a className="ecosystem-secondary" href="#products">Explore the ecosystem</a>
+              <a className="ecosystem-primary" href="/accounts">Continue with Drixel ID</a>
+              <a className="ecosystem-text-link" href="#group">View the group</a>
             </div>
-            <div className="ecosystem-domain">www.accounts.drixelsa.co.za</div>
           </div>
-
-          <div className="ecosystem-command-card" aria-label="Drixel ecosystem access preview">
-            <div className="ecosystem-command-top">
-              <span className="ecosystem-command-dot" />
-              <span>Drixel account</span>
-              <span className="ecosystem-command-secure">SECURE ACCESS</span>
-            </div>
-            <div className="ecosystem-avatar">DL</div>
-            <strong>Your Drixel identity</strong>
-            <p>One identity. Access only to the businesses and services assigned to you.</p>
-            <div className="ecosystem-access-row"><span>Drixel SA</span><b>Connected</b></div>
-            <div className="ecosystem-access-row"><span>Excel Tutoring</span><b>Scoped</b></div>
-            <div className="ecosystem-access-row"><span>DrixelOne</span><b>Managed</b></div>
+          <div className="ecosystem-hero-meta" aria-label="Platform information">
+            <div><span>Platform</span><strong>Drixel Accounts</strong></div>
+            <div><span>Identity</span><strong>Drixel ID</strong></div>
+            <div><span>Access model</span><strong>Business-scoped</strong></div>
+            <div><span>Administration</span><strong>Role controlled</strong></div>
           </div>
         </section>
 
-        <section className="ecosystem-trust-strip" aria-label="Platform principles">
-          <span>OIDC + PKCE</span>
-          <span>Role-based access</span>
-          <span>Audit history</span>
-          <span>Business-scoped permissions</span>
+        <section className="ecosystem-principles" aria-label="Platform principles">
+          <span>01</span><p>One identity</p>
+          <span>02</span><p>Scoped permissions</p>
+          <span>03</span><p>Auditable access</p>
+          <span>04</span><p>Independent products</p>
         </section>
 
-        <section className="ecosystem-section" id="products">
+        <section className="ecosystem-section" id="group">
           <div className="ecosystem-section-heading">
-            <div>
-              <span className="ecosystem-kicker">THE GROUP</span>
-              <h2>Products with their own identity.<br />Connected by one platform.</h2>
-            </div>
-            <p>Each Drixel business remains focused on its own customers and purpose while sharing trusted group infrastructure.</p>
+            <span className="ecosystem-kicker">DRIXEL LABS GROUP</span>
+            <h2>Distinct businesses.<br />Shared infrastructure.</h2>
+            <p>Each business keeps its own product, customers and operating model while using common group services where it makes sense.</p>
           </div>
 
-          <div className="ecosystem-product-grid">
-            {products.map((product) => (
-              <a className="ecosystem-product" href={product.href} key={product.name}>
-                <div className="ecosystem-product-head">
-                  <span className="ecosystem-product-mark">{product.mark}</span>
-                  <span className="ecosystem-product-state">{product.state}</span>
+          <div className="ecosystem-product-list">
+            {products.map((product, index) => (
+              <a className="ecosystem-product-row" href={product.href} key={product.name}>
+                <span className="ecosystem-product-index">0{index + 1}</span>
+                <div className="ecosystem-product-main">
+                  <span>{product.label}</span>
+                  <h3>{product.name}</h3>
                 </div>
-                <span className="ecosystem-product-label">{product.label}</span>
-                <h3>{product.name}</h3>
                 <p>{product.description}</p>
-                <span className="ecosystem-product-link">Open product <span>↗</span></span>
+                <div className="ecosystem-product-end"><span>{product.state}</span><b>↗</b></div>
               </a>
             ))}
           </div>
         </section>
 
         <section className="ecosystem-identity" id="identity">
-          <div className="ecosystem-identity-panel">
+          <div className="ecosystem-identity-heading">
             <span className="ecosystem-kicker ecosystem-kicker-light">DRIXEL ID</span>
-            <h2>The identity layer behind the group.</h2>
-            <p>
-              Authentication is shared; authorization is not. Your Drixel identity can be recognized across products while
-              access remains controlled by business, service and role.
-            </p>
-            <a href="/accounts">Manage account access</a>
+            <h2>Shared identity.<br />Separate authority.</h2>
           </div>
-          <div className="ecosystem-capability-list">
-            {capabilities.map(([title, description], index) => (
-              <div className="ecosystem-capability" key={title}>
-                <span>0{index + 1}</span>
-                <div><strong>{title}</strong><p>{description}</p></div>
-              </div>
-            ))}
+          <div className="ecosystem-identity-copy">
+            <p>
+              Drixel ID lets a person be recognized across the group without giving them blanket access. Authentication can be shared while permissions remain specific to each business, service and role.
+            </p>
+            <div className="ecosystem-identity-rule"><span>Authentication</span><strong>Shared</strong></div>
+            <div className="ecosystem-identity-rule"><span>Authorization</span><strong>Scoped</strong></div>
+            <div className="ecosystem-identity-rule"><span>Activity</span><strong>Auditable</strong></div>
+            <a href="/accounts">Manage account access →</a>
           </div>
         </section>
 
         <section className="ecosystem-admin-callout">
+          <span className="ecosystem-kicker">GROUP ADMINISTRATION</span>
           <div>
-            <span className="ecosystem-kicker">FOR AUTHORIZED TEAM MEMBERS</span>
-            <h2>Manage the group from one control plane.</h2>
-            <p>Businesses, services, accounts, roles and audit history remain inside the secure Drixel administration console.</p>
+            <h2>Manage businesses, services and access from one control plane.</h2>
+            <a className="ecosystem-primary ecosystem-primary-light" href="/overview">Open administration</a>
           </div>
-          <a className="ecosystem-primary ecosystem-primary-dark" href="/overview">Open administration</a>
         </section>
       </main>
 
       <footer className="ecosystem-footer">
-        <div><strong>DRIXEL</strong><span>LABS INC</span></div>
-        <p>Drixel Accounts · Identity and access for the Drixel ecosystem.</p>
-        <a href="/settings">System settings</a>
+        <div className="ecosystem-footer-brand">DRIXEL <span>LABS INC</span></div>
+        <p>Identity and access infrastructure for the Drixel ecosystem.</p>
+        <div className="ecosystem-footer-links"><a href="/settings">Settings</a><a href="/overview">Admin</a></div>
       </footer>
     </div>
   )
