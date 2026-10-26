@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'scripts/refactor-overview-premium.mjs'
+      - 'scripts/remove-old-overview-metric.mjs'
       - '.github/workflows/apply-overview-refactor.yml'
   workflow_dispatch:
 
@@ -20,6 +21,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: node scripts/refactor-overview-premium.mjs
+      - run: node scripts/remove-old-overview-metric.mjs
       - run: npm ci
       - run: npm run build
       - name: Commit refactor
