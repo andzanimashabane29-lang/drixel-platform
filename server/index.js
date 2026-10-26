@@ -8,6 +8,19 @@ const ssl = sslMode === 'require'
   ? { rejectUnauthorized: process.env.PGSSL_REJECT_UNAUTHORIZED !== 'false' }
   : undefined
 
+const deriveRoleConnection = (adminUrl, username, password) => {
+  if (!adminUrl || !username || !password) return undefined
+  const url = new URL(adminUrl)
+  url.username = username
+  url.password = password
+  return url.toString()
+}
+
+const directoryDatabaseUrl = process.env.DIRECTORY_DATABASE_URL
+  ?? deriveRoleConnection(process.env.ADMIN_DATABASE_URL, 'drixel_directory_reader', process.env.POSTGRES_DIRECTORY_PASSWORD)
+const managementDatabaseUrl = process.env.MANAGEMENT_DATABASE_URL
+  ?? deriveRoleConnection(process.env.ADMIN_DATABASE_URL, 'drixel_management_api', process.env.POSTGRES_MANAGEMENT_PASSWORD)
+
 const requiredProduction = [
   'OIDC_ISSUER',
   'OIDC_AUDIENCE',
@@ -17,8 +30,8 @@ const requiredProduction = [
 
 if (isProduction) {
   const missing = requiredProduction.filter((name) => !process.env[name])
-  if (!process.env.DIRECTORY_DATABASE_URL && !process.env.PGPASSWORD) missing.push('DIRECTORY_DATABASE_URL or PGPASSWORD')
-  if (!process.env.MANAGEMENT_DATABASE_URL && !process.env.PGMANAGEMENTPASSWORD) missing.push('MANAGEMENT_DATABASE_URL or PGMANAGEMENTPASSWORD')
+  if (!directoryDatabaseUrl && !process.env.PGPASSWORD) missing.push('DIRECTORY_DATABASE_URL or ADMIN_DATABASE_URL + POSTGRES_DIRECTORY_PASSWORD')
+  if (!managementDatabaseUrl && !process.env.PGMANAGEMENTPASSWORD) missing.push('MANAGEMENT_DATABASE_URL or ADMIN_DATABASE_URL + POSTGRES_MANAGEMENT_PASSWORD')
   if (missing.length) {
     console.error(`Missing required production configuration: ${missing.join(', ')}`)
     process.exit(1)
@@ -33,9 +46,9 @@ const sharedPoolOptions = {
   ssl,
 }
 
-const directoryPool = new Pool(process.env.DIRECTORY_DATABASE_URL ? {
+const directoryPool = new Pool(directoryDatabaseUrl ? {
   ...sharedPoolOptions,
-  connectionString: process.env.DIRECTORY_DATABASE_URL,
+  connectionString: directoryDatabaseUrl,
   application_name: 'drixel-directory-api',
 } : {
   ...sharedPoolOptions,
@@ -47,9 +60,9 @@ const directoryPool = new Pool(process.env.DIRECTORY_DATABASE_URL ? {
   application_name: 'drixel-directory-api',
 })
 
-const managementPool = new Pool(process.env.MANAGEMENT_DATABASE_URL ? {
+const managementPool = new Pool(managementDatabaseUrl ? {
   ...sharedPoolOptions,
-  connectionString: process.env.MANAGEMENT_DATABASE_URL,
+  connectionString: managementDatabaseUrl,
   application_name: 'drixel-management-api',
 } : {
   ...sharedPoolOptions,
