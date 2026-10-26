@@ -46,4 +46,12 @@ CREATE TABLE IF NOT EXISTS drixel.applications (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Managed staging intentionally uses Render's database owner connection and no OIDC/admin writes.
+-- Previous failed production-style attempts may have left RLS forced on these tables, so explicitly
+-- remove it here. Production migrations keep RLS enabled and forced for least-privilege roles.
+ALTER TABLE drixel.organizations NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE drixel.organizations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE drixel.applications NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE drixel.applications DISABLE ROW LEVEL SECURITY;
+
 CREATE INDEX IF NOT EXISTS organization_parent_idx ON drixel.organizations(parent_organization_id);
