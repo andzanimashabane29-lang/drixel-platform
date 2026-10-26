@@ -7,6 +7,7 @@ RUN npm ci --omit=dev
 
 COPY server ./server
 COPY db ./db
+COPY scripts ./scripts
 
 ENV NODE_ENV=production
 ENV API_PORT=3000
