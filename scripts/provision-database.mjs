@@ -54,7 +54,13 @@ async function bootstrapOwner(client) {
   const provided = [email, name, issuer, subject].filter(Boolean).length
 
   if (provided === 0) return
-  if (provided !== 4) throw new Error('Set OIDC_BOOTSTRAP_ADMIN_EMAIL, OIDC_BOOTSTRAP_ADMIN_NAME, OIDC_ISSUER and OIDC_BOOTSTRAP_ADMIN_SUBJECT together')
+  if (provided !== 4) {
+    if (managedStaging) {
+      console.warn('Skipping owner bootstrap in managed staging because bootstrap configuration is incomplete.')
+      return
+    }
+    throw new Error('Set OIDC_BOOTSTRAP_ADMIN_EMAIL, OIDC_BOOTSTRAP_ADMIN_NAME, OIDC_ISSUER and OIDC_BOOTSTRAP_ADMIN_SUBJECT together')
+  }
 
   await client.query("SELECT set_config('drixel.bootstrap_email', $1, false)", [email])
   await client.query("SELECT set_config('drixel.bootstrap_name', $1, false)", [name])
