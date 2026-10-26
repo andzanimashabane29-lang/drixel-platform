@@ -9,7 +9,8 @@ const required = (name) => {
 }
 
 const adminUrl = required('ADMIN_DATABASE_URL')
-const setupRoleLogins = process.env.SETUP_DATABASE_ROLE_LOGINS === 'true'
+const managedStaging = process.env.MANAGED_STAGING === 'true'
+const setupRoleLogins = !managedStaging && process.env.SETUP_DATABASE_ROLE_LOGINS === 'true'
 const directoryPassword = setupRoleLogins ? required('POSTGRES_DIRECTORY_PASSWORD') : undefined
 const managementPassword = setupRoleLogins ? required('POSTGRES_MANAGEMENT_PASSWORD') : undefined
 const ssl = process.env.PGSSL === 'disable'
@@ -19,9 +20,13 @@ const ssl = process.env.PGSSL === 'disable'
 const pool = new Pool({ connectionString: adminUrl, ssl, max: 1, application_name: 'drixel-db-provisioner' })
 const root = process.cwd()
 
-const sqlFiles = [
+const coreSqlFiles = [
   'db/migrations/001_initial.sql',
   'db/seed/001_portfolio.sql',
+]
+
+const productionSqlFiles = [
+  ...coreSqlFiles,
   'db/migrations/002_directory_reader.sql',
   'db/migrations/003_identity_management.sql',
   'db/migrations/004_portfolio_management.sql',
@@ -47,6 +52,7 @@ async function bootstrapOwner(client) {
   const provided = [email, name, issuer, subject].filter(Boolean).length
 
   if (provided === 0) return
+  if (managedStaging) throw new Error('Owner bootstrap is disabled in MANAGED_STAGING mode')
   if (provided !== 4) throw new Error('Set OIDC_BOOTSTRAP_ADMIN_EMAIL, OIDC_BOOTSTRAP_ADMIN_NAME, OIDC_ISSUER and OIDC_BOOTSTRAP_ADMIN_SUBJECT together')
 
   await client.query("SELECT set_config('drixel.bootstrap_email', $1, false)", [email])
@@ -59,13 +65,19 @@ async function bootstrapOwner(client) {
 const client = await pool.connect()
 try {
   await client.query('BEGIN')
+  const sqlFiles = managedStaging ? coreSqlFiles : productionSqlFiles
+  console.log(managedStaging
+    ? 'Provisioning managed staging database with core schema only.'
+    : 'Provisioning full production database schema.')
   for (const file of sqlFiles) await runFile(client, file)
+
   if (setupRoleLogins) {
     await setRolePassword(client, 'drixel_directory_reader', directoryPassword)
     await setRolePassword(client, 'drixel_management_api', managementPassword)
   } else {
-    console.log('Skipping database role login mutation. Set SETUP_DATABASE_ROLE_LOGINS=true only on a database that permits ALTER ROLE.')
+    console.log('Skipping database role login mutation.')
   }
+
   await bootstrapOwner(client)
   await client.query('COMMIT')
   console.log('Drixel database provisioning completed successfully.')
