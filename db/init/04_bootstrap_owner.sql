@@ -1,8 +1,8 @@
 -- Optional one-time bootstrap for the first Drixel group owner.
--- Values are injected by the local initialization script, never by the browser.
+-- Values are injected by the initialization script, never by the browser.
 DO $$
 DECLARE
-  bootstrap_email text := lower(btrim(current_setting('drixel.bootstrap_email')));
+  bootstrap_email text := nullif(lower(btrim(current_setting('drixel.bootstrap_email', true))), '');
   bootstrap_name text := btrim(current_setting('drixel.bootstrap_name'));
   bootstrap_issuer text := current_setting('drixel.bootstrap_issuer');
   bootstrap_subject text := current_setting('drixel.bootstrap_subject');
@@ -19,16 +19,18 @@ BEGIN
   WHERE identity.issuer = bootstrap_issuer AND identity.subject = bootstrap_subject;
 
   IF bootstrap_account_id IS NULL THEN
-    IF EXISTS (SELECT 1 FROM drixel.account_emails WHERE normalized_email = bootstrap_email) THEN
+    IF bootstrap_email IS NOT NULL AND EXISTS (SELECT 1 FROM drixel.account_emails WHERE normalized_email = bootstrap_email) THEN
       RAISE EXCEPTION 'Bootstrap email already belongs to an account; verify and link its identity manually';
     END IF;
 
     INSERT INTO drixel.accounts (display_name) VALUES (bootstrap_name) RETURNING id INTO bootstrap_account_id;
-    INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary)
-      VALUES (bootstrap_account_id, bootstrap_email, true, true);
+    IF bootstrap_email IS NOT NULL THEN
+      INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary)
+        VALUES (bootstrap_account_id, bootstrap_email, true, true);
+    END IF;
     INSERT INTO drixel.account_identities (account_id, issuer, subject)
       VALUES (bootstrap_account_id, bootstrap_issuer, bootstrap_subject);
-  ELSIF NOT EXISTS (
+  ELSIF bootstrap_email IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM drixel.account_emails
     WHERE account_emails.account_id = bootstrap_account_id
       AND normalized_email = bootstrap_email AND is_verified
