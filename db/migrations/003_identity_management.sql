@@ -7,7 +7,6 @@ BEGIN
   END IF;
 END
 $$;
-ALTER ROLE drixel_management_api NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 
 CREATE TABLE IF NOT EXISTS drixel.invitations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
