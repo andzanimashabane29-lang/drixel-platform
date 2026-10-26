@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Building2, ChevronRight, CircleUserRound, KeyRound, Layers3, LayoutDashboard, LogIn, LogOut, Menu, Search, ScrollText, Settings, ShieldCheck, Users, X, type LucideIcon } from 'lucide-react'
+import { Building2, ChevronRight, CircleUserRound, KeyRound, Layers3, LayoutDashboard, LogIn, LogOut, Menu, Moon, Search, ScrollText, Settings, ShieldCheck, Sun, Users, X, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 export type AdminNavItem = { label: string; href: string; active?: boolean; onClick: () => void }
@@ -44,11 +44,17 @@ function SidebarContent({ items, oidcConfigured, onSettings }: { items: AdminNav
 export function AdminShell({ items, breadcrumbs, search, authenticated, oidcConfigured, onSignIn, onSignOut, onSettings, children }: { items: AdminNavItem[]; breadcrumbs: Array<{ label: string; onClick?: () => void }>; search?: { value: string; placeholder: string; onChange: (value: string) => void }; authenticated: boolean; oidcConfigured: boolean; onSignIn: () => void; onSignOut: () => void; onSettings: () => void; children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('drixel-theme') === 'dark' || (!localStorage.getItem('drixel-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches))
   const [commandQuery, setCommandQuery] = useState('')
   const commandItems = useMemo(() => {
     const query = commandQuery.trim().toLowerCase()
     return query ? items.filter((item) => item.label.toLowerCase().includes(query)) : items
   }, [items, commandQuery])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode)
+    localStorage.setItem('drixel-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -75,7 +81,7 @@ export function AdminShell({ items, breadcrumbs, search, authenticated, oidcConf
         {search && <label className="hidden h-9 w-60 items-center gap-2 rounded-[var(--radius-control)] border border-border bg-surface px-3 lg:flex"><Search size={14} className="text-tertiary-foreground" /><span className="sr-only">Search</span><input value={search.value} onChange={(event) => search.onChange(event.target.value)} placeholder={search.placeholder} className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-tertiary-foreground" /></label>}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild><button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-foreground text-[11px] font-semibold text-background ring-offset-2 hover:opacity-90" aria-label="Account menu">{authenticated ? 'ID' : 'DL'}</button></DropdownMenu.Trigger>
-          <DropdownMenu.Portal><DropdownMenu.Content sideOffset={10} align="end" className="z-50 min-w-56 rounded-[var(--radius-card)] border border-border bg-surface p-1.5 shadow-[var(--floating-shadow)]"><div className="px-2.5 py-2"><p className="text-[12px] font-medium text-foreground">{authenticated ? 'Drixel ID' : 'Drixel Labs'}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{authenticated ? 'Secure session active' : 'Not signed in'}</p></div><DropdownMenu.Separator className="my-1 h-px bg-border" /><DropdownMenu.Item onSelect={onSettings} className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12px] text-foreground outline-none hover:bg-surface-hover focus:bg-surface-hover"><Settings size={15} />Settings</DropdownMenu.Item><DropdownMenu.Item onSelect={authenticated ? onSignOut : onSignIn} className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12px] text-foreground outline-none hover:bg-surface-hover focus:bg-surface-hover">{authenticated ? <LogOut size={15} /> : <LogIn size={15} />}{authenticated ? 'Sign out' : 'Sign in'}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal>
+          <DropdownMenu.Portal><DropdownMenu.Content sideOffset={10} align="end" className="z-50 min-w-56 rounded-[var(--radius-card)] border border-border bg-surface p-1.5 shadow-[var(--floating-shadow)]"><div className="px-2.5 py-2"><p className="text-[12px] font-medium text-foreground">{authenticated ? 'Drixel ID' : 'Drixel Labs'}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{authenticated ? 'Secure session active' : 'Not signed in'}</p></div><DropdownMenu.Separator className="my-1 h-px bg-border" /><DropdownMenu.Item onSelect={onSettings} className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12px] text-foreground outline-none hover:bg-surface-hover focus:bg-surface-hover"><Settings size={15} />Settings</DropdownMenu.Item><DropdownMenu.Item onSelect={(event) => { event.preventDefault(); setDarkMode((value) => !value) }} className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12px] text-foreground outline-none hover:bg-surface-hover focus:bg-surface-hover">{darkMode ? <Sun size={15} /> : <Moon size={15} />}{darkMode ? 'Use light appearance' : 'Use dark appearance'}</DropdownMenu.Item><DropdownMenu.Item onSelect={authenticated ? onSignOut : onSignIn} className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12px] text-foreground outline-none hover:bg-surface-hover focus:bg-surface-hover">{authenticated ? <LogOut size={15} /> : <LogIn size={15} />}{authenticated ? 'Sign out' : 'Sign in'}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>
       </header>
       <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-10 md:py-10">{children}</main>
