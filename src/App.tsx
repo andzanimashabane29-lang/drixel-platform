@@ -97,8 +97,8 @@ function App() {
   const section = route.section
   const [query, setQuery] = useState('')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [accessToken, setAccessToken] = useState<string>()
-  const [idToken, setIdToken] = useState<string>()
+  const [accessToken, setAccessToken] = useState<string | undefined>(() => sessionStorage.getItem('drixel-access-token') ?? undefined)
+  const [idToken, setIdToken] = useState<string | undefined>(() => sessionStorage.getItem('drixel-id-token') ?? undefined)
   const [authError, setAuthError] = useState('')
   const [portfolio, setPortfolio] = useState<Portfolio>(emptyPortfolio)
   const [directoryLoading, setDirectoryLoading] = useState(true)
@@ -143,6 +143,8 @@ function App() {
         }
         setAccessToken(tokens.access_token)
         setIdToken(tokens.id_token)
+        sessionStorage.setItem('drixel-access-token', tokens.access_token)
+        sessionStorage.setItem('drixel-id-token', tokens.id_token)
         setAuthError('')
         const returnTo = transaction.returnTo || '/accounts'
         window.history.replaceState(null, '', returnTo)
@@ -286,7 +288,14 @@ function App() {
             </div>}
             <div className="account-menu-wrap">
               <button className="user-control" aria-label={accessToken ? 'Sign out' : 'Sign in'} onClick={() => {
-                if (accessToken) { setAccessToken(undefined); setIdToken(undefined); setAuthError(''); return }
+                if (accessToken) {
+                  setAccessToken(undefined)
+                  setIdToken(undefined)
+                  sessionStorage.removeItem('drixel-access-token')
+                  sessionStorage.removeItem('drixel-id-token')
+                  setAuthError('')
+                  return
+                }
                 if (oidcConfigured) void beginOidcLogin().catch(() => setAuthError('Could not start secure sign-in.'))
                 else selectSection('Settings')
               }}>
