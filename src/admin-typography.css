@@ -1,0 +1,140 @@
+/* Drixel Labs admin typography
+   Sharp editorial/corporate type treatment. Deliberately avoids soft startup/UI font styling. */
+
+body:not(.ecosystem-page) {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+body:not(.ecosystem-page) button,
+body:not(.ecosystem-page) input,
+body:not(.ecosystem-page) select,
+body:not(.ecosystem-page) textarea {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+body:not(.ecosystem-page) .brand-name {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: .21em;
+}
+
+body:not(.ecosystem-page) .brand-caption,
+body:not(.ecosystem-page) .workspace-label,
+body:not(.ecosystem-page) .nav-label,
+body:not(.ecosystem-page) .eyebrow,
+body:not(.ecosystem-page) .panel-meta,
+body:not(.ecosystem-page) .data-table th {
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+body:not(.ecosystem-page) .workspace-switcher strong,
+body:not(.ecosystem-page) .nav-item,
+body:not(.ecosystem-page) .breadcrumb,
+body:not(.ecosystem-page) .search-field,
+body:not(.ecosystem-page) .user-control,
+body:not(.ecosystem-page) .button,
+body:not(.ecosystem-page) .text-button {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body:not(.ecosystem-page) .page-heading h1 {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: clamp(36px, 3vw, 46px);
+  line-height: .98;
+  font-weight: 800;
+  letter-spacing: -.055em;
+}
+
+body:not(.ecosystem-page) .page-heading p {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: -.006em;
+}
+
+body:not(.ecosystem-page) .metric-label {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .015em;
+}
+
+body:not(.ecosystem-page) .metric-value {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 31px;
+  font-weight: 800;
+  letter-spacing: -.045em;
+}
+
+body:not(.ecosystem-page) .metric-detail,
+body:not(.ecosystem-page) .status-banner p,
+body:not(.ecosystem-page) .panel-heading p,
+body:not(.ecosystem-page) .data-table td {
+  font-family: Arial, Helvetica, sans-serif;
+  letter-spacing: 0;
+}
+
+body:not(.ecosystem-page) .status-banner strong,
+body:not(.ecosystem-page) .panel-heading h2,
+body:not(.ecosystem-page) .table-primary,
+body:not(.ecosystem-page) .setup-copy h2,
+body:not(.ecosystem-page) .service-summary-row strong {
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 800;
+  letter-spacing: -.018em;
+}
+
+body:not(.ecosystem-page) .panel-heading h2 {
+  font-size: 15px;
+}
+
+body:not(.ecosystem-page) .table-primary {
+  font-size: 12px;
+}
+
+body:not(.ecosystem-page) .nav-item {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+body:not(.ecosystem-page) .nav-item-active {
+  font-weight: 800;
+}
+
+body:not(.ecosystem-page) .breadcrumb {
+  font-size: 11px;
+  letter-spacing: -.005em;
+}
+
+body:not(.ecosystem-page) .button {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .005em;
+}
+
+body:not(.ecosystem-page) .data-table th {
+  font-size: 9px;
+  letter-spacing: .105em;
+}
+
+body:not(.ecosystem-page) .data-table td {
+  font-size: 11px;
+}
+
+body:not(.ecosystem-page) .workspace-switcher strong {
+  font-weight: 700;
+  letter-spacing: -.015em;
+}
+
+@media (max-width: 560px) {
+  body:not(.ecosystem-page) .page-heading h1 {
+    font-size: 31px;
+  }
+}
