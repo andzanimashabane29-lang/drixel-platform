@@ -1,0 +1,505 @@
+/*
+ * Drixel Admin — product-system refinement
+ * A restrained enterprise UI with native system typography, consistent spacing,
+ * stable forms/tables, and zero decorative "AI dashboard" styling.
+ */
+
+body:not(.ecosystem-page) {
+  --dx-bg: #f5f5f7;
+  --dx-surface: #ffffff;
+  --dx-sidebar: #0d0e11;
+  --dx-sidebar-hover: #1a1b20;
+  --dx-sidebar-active: #24252b;
+  --dx-text: #1d1d1f;
+  --dx-text-2: #515154;
+  --dx-text-3: #86868b;
+  --dx-line: #dedee3;
+  --dx-line-soft: #ececf0;
+  --dx-control: #f7f7f9;
+  --dx-blue: #0066cc;
+  --dx-green: #1f7a3a;
+  --dx-danger: #b42318;
+  --dx-radius: 12px;
+  --dx-radius-sm: 9px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  color: var(--dx-text);
+  background: var(--dx-bg);
+  letter-spacing: -0.006em;
+}
+
+body:not(.ecosystem-page) button,
+body:not(.ecosystem-page) input,
+body:not(.ecosystem-page) select,
+body:not(.ecosystem-page) textarea {
+  font-family: inherit !important;
+  letter-spacing: inherit;
+}
+
+/* Shell and navigation */
+body:not(.ecosystem-page) .sidebar {
+  width: 248px !important;
+  background: var(--dx-sidebar) !important;
+  border-right: 1px solid rgba(255,255,255,.06) !important;
+}
+
+body:not(.ecosystem-page) .main-column {
+  width: calc(100% - 248px) !important;
+  margin-left: 248px !important;
+}
+
+body:not(.ecosystem-page) .brand-lockup {
+  height: 72px !important;
+  padding: 0 22px !important;
+}
+
+body:not(.ecosystem-page) .brand-name {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  letter-spacing: .18em !important;
+}
+
+body:not(.ecosystem-page) .workspace-switcher {
+  margin: 16px 12px 10px !important;
+  padding: 14px !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,.035) !important;
+  box-shadow: none !important;
+}
+
+body:not(.ecosystem-page) .main-nav {
+  padding: 14px 10px 24px !important;
+  gap: 3px !important;
+}
+
+body:not(.ecosystem-page) .nav-item {
+  min-height: 40px !important;
+  padding: 0 13px !important;
+  border-radius: 9px !important;
+  color: #b4b4bb !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+}
+
+body:not(.ecosystem-page) .nav-item:hover {
+  background: var(--dx-sidebar-hover) !important;
+  color: #fff !important;
+}
+
+body:not(.ecosystem-page) .nav-item-active {
+  background: var(--dx-sidebar-active) !important;
+  color: #fff !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06) !important;
+}
+
+/* Opaque toolbar: content no longer visually bleeds underneath */
+body:not(.ecosystem-page) .topbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 40 !important;
+  height: 64px !important;
+  padding: 0 28px !important;
+  background: rgba(248,248,250,.98) !important;
+  border-bottom: 1px solid var(--dx-line) !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,.015) !important;
+  backdrop-filter: blur(18px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(160%) !important;
+}
+
+body:not(.ecosystem-page) .breadcrumb {
+  min-width: 0;
+  font-size: 11.5px !important;
+  gap: 8px !important;
+}
+
+body:not(.ecosystem-page) .breadcrumb strong,
+body:not(.ecosystem-page) .breadcrumb a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body:not(.ecosystem-page) .topbar-actions {
+  flex: 0 0 auto;
+  gap: 16px !important;
+}
+
+body:not(.ecosystem-page) .search-field {
+  width: 258px !important;
+  height: 36px !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  background: #ebebef !important;
+  box-shadow: none !important;
+}
+
+body:not(.ecosystem-page) .search-field:focus-within {
+  background: #fff !important;
+  border-color: rgba(0,102,204,.45) !important;
+  box-shadow: 0 0 0 3px rgba(0,102,204,.10) !important;
+}
+
+/* Page hierarchy */
+body:not(.ecosystem-page) .page-content {
+  width: min(1180px, calc(100% - 56px)) !important;
+  max-width: 1180px !important;
+  margin: 0 auto !important;
+  padding: 40px 0 64px !important;
+}
+
+body:not(.ecosystem-page) .page-heading {
+  margin-bottom: 28px !important;
+}
+
+body:not(.ecosystem-page) .eyebrow {
+  color: var(--dx-blue) !important;
+  font-size: 10px !important;
+  font-weight: 650 !important;
+  letter-spacing: .02em !important;
+  text-transform: none !important;
+}
+
+body:not(.ecosystem-page) .page-heading h1 {
+  margin: 7px 0 7px !important;
+  font-size: clamp(32px, 3vw, 44px) !important;
+  line-height: 1.04 !important;
+  font-weight: 650 !important;
+  letter-spacing: -.042em !important;
+}
+
+body:not(.ecosystem-page) .page-heading p {
+  color: var(--dx-text-2) !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+}
+
+/* Panels: quieter, flatter, less "generated dashboard" */
+body:not(.ecosystem-page) .content-panel,
+body:not(.ecosystem-page) .setup-panel,
+body:not(.ecosystem-page) .empty-state {
+  border: 1px solid var(--dx-line-soft) !important;
+  border-radius: 14px !important;
+  background: var(--dx-surface) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.025) !important;
+  overflow: hidden !important;
+}
+
+body:not(.ecosystem-page) .content-panel:hover {
+  box-shadow: 0 1px 2px rgba(0,0,0,.025) !important;
+}
+
+body:not(.ecosystem-page) .panel-heading {
+  min-height: 72px !important;
+  padding: 17px 20px !important;
+  border-bottom: 1px solid var(--dx-line-soft) !important;
+}
+
+body:not(.ecosystem-page) .panel-heading h2 {
+  font-size: 15px !important;
+  line-height: 1.25 !important;
+  font-weight: 650 !important;
+  letter-spacing: -.018em !important;
+}
+
+body:not(.ecosystem-page) .panel-heading p {
+  margin-top: 5px !important;
+  color: var(--dx-text-3) !important;
+  font-size: 11.5px !important;
+}
+
+/* Controls */
+body:not(.ecosystem-page) .button {
+  min-height: 38px !important;
+  padding: 0 15px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+}
+
+body:not(.ecosystem-page) .button-primary {
+  background: var(--dx-blue) !important;
+  border-color: var(--dx-blue) !important;
+}
+
+body:not(.ecosystem-page) .button-secondary {
+  background: #f1f1f4 !important;
+  border: 1px solid transparent !important;
+  color: var(--dx-text) !important;
+}
+
+body:not(.ecosystem-page) input,
+body:not(.ecosystem-page) select,
+body:not(.ecosystem-page) textarea {
+  border-color: #d2d2d7 !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: var(--dx-text) !important;
+}
+
+body:not(.ecosystem-page) input:focus,
+body:not(.ecosystem-page) select:focus,
+body:not(.ecosystem-page) textarea:focus {
+  outline: none !important;
+  border-color: rgba(0,102,204,.55) !important;
+  box-shadow: 0 0 0 3px rgba(0,102,204,.10) !important;
+}
+
+/* Service/business create form — fixes overlapping labels/fields */
+body:not(.ecosystem-page) .portfolio-management {
+  margin-bottom: 24px !important;
+}
+
+body:not(.ecosystem-page) .portfolio-create-form {
+  display: grid !important;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(220px, 1.15fr) auto !important;
+  align-items: end !important;
+  gap: 16px !important;
+  padding: 18px 20px 20px !important;
+}
+
+body:not(.ecosystem-page) .portfolio-create-form label,
+body:not(.ecosystem-page) .invite-form label {
+  display: grid !important;
+  grid-template-rows: auto 42px !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  color: var(--dx-text-2) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+}
+
+body:not(.ecosystem-page) .portfolio-create-form input,
+body:not(.ecosystem-page) .portfolio-create-form select,
+body:not(.ecosystem-page) .invite-form input,
+body:not(.ecosystem-page) .invite-form select {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+  font-weight: 450 !important;
+}
+
+body:not(.ecosystem-page) .portfolio-create-submit,
+body:not(.ecosystem-page) .invite-submit {
+  align-self: end !important;
+  min-width: max-content !important;
+}
+
+body:not(.ecosystem-page) .portfolio-create-submit .button {
+  height: 42px !important;
+  min-height: 42px !important;
+}
+
+/* Inline editor table — no label/control collisions */
+body:not(.ecosystem-page) .portfolio-management .table-scroll {
+  border-top: 1px solid var(--dx-line-soft) !important;
+}
+
+body:not(.ecosystem-page) .portfolio-management .data-table {
+  min-width: 760px !important;
+  table-layout: fixed !important;
+}
+
+body:not(.ecosystem-page) .portfolio-management .data-table th:nth-child(1),
+body:not(.ecosystem-page) .portfolio-management .data-table td:nth-child(1) { width: 48%; }
+body:not(.ecosystem-page) .portfolio-management .data-table th:nth-child(2),
+body:not(.ecosystem-page) .portfolio-management .data-table td:nth-child(2) { width: 22%; }
+body:not(.ecosystem-page) .portfolio-management .data-table th:nth-child(3),
+body:not(.ecosystem-page) .portfolio-management .data-table td:nth-child(3) { width: 30%; text-align: right; }
+
+body:not(.ecosystem-page) .portfolio-row-input,
+body:not(.ecosystem-page) .portfolio-row-select {
+  display: block !important;
+  width: 100% !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  margin: 0 !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+}
+
+body:not(.ecosystem-page) .portfolio-row-select {
+  min-width: 0 !important;
+}
+
+body:not(.ecosystem-page) .portfolio-management .data-table td .button {
+  min-width: 104px !important;
+}
+
+/* Directory toolbar */
+body:not(.ecosystem-page) .directory-toolbar {
+  min-height: 62px !important;
+  padding: 12px 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid var(--dx-line-soft) !important;
+  background: #fbfbfc !important;
+}
+
+body:not(.ecosystem-page) .status-filter,
+body:not(.ecosystem-page) .page-size-control {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: var(--dx-text-2) !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+}
+
+body:not(.ecosystem-page) .status-filter select,
+body:not(.ecosystem-page) .page-size-control select,
+body:not(.ecosystem-page) .directory-toolbar select {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 30px 0 10px !important;
+  font-size: 11px !important;
+}
+
+/* Tables */
+body:not(.ecosystem-page) .data-table {
+  width: 100% !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+body:not(.ecosystem-page) .data-table thead {
+  background: #f7f7f9 !important;
+}
+
+body:not(.ecosystem-page) .data-table th {
+  height: 42px !important;
+  padding: 0 18px !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid var(--dx-line-soft) !important;
+  color: #6e6e73 !important;
+  font-size: 10px !important;
+  font-weight: 650 !important;
+  letter-spacing: .035em !important;
+  vertical-align: middle !important;
+}
+
+body:not(.ecosystem-page) .data-table td {
+  height: 56px !important;
+  padding: 9px 18px !important;
+  border-bottom: 1px solid var(--dx-line-soft) !important;
+  color: var(--dx-text-2) !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+  vertical-align: middle !important;
+}
+
+body:not(.ecosystem-page) .data-table tbody tr:hover {
+  background: #fafafd !important;
+}
+
+body:not(.ecosystem-page) .table-primary,
+body:not(.ecosystem-page) .table-record-link {
+  color: var(--dx-text) !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+}
+
+body:not(.ecosystem-page) .table-record-link:hover {
+  color: var(--dx-blue) !important;
+}
+
+body:not(.ecosystem-page) .status-tag,
+body:not(.ecosystem-page) .scope-tag {
+  min-height: 24px !important;
+  padding: 3px 9px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+}
+
+/* Pagination */
+body:not(.ecosystem-page) .directory-pagination {
+  min-height: 68px !important;
+  padding: 12px 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  border-top: 1px solid var(--dx-line-soft) !important;
+  background: #fff !important;
+}
+
+body:not(.ecosystem-page) .pagination-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+/* Settings/account forms stay visually related */
+body:not(.ecosystem-page) .invite-form {
+  grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+  gap: 16px !important;
+  padding: 18px 20px 20px !important;
+}
+
+body:not(.ecosystem-page) .account-access-cell select {
+  height: 36px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+}
+
+/* Better desktop scaling */
+@media (max-width: 1180px) {
+  body:not(.ecosystem-page) .portfolio-create-form {
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+  }
+  body:not(.ecosystem-page) .portfolio-create-submit {
+    grid-column: 1 / -1;
+  }
+  body:not(.ecosystem-page) .invite-form {
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  body:not(.ecosystem-page) .sidebar {
+    width: min(286px, 88vw) !important;
+  }
+  body:not(.ecosystem-page) .main-column {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+  body:not(.ecosystem-page) .page-content {
+    width: calc(100% - 32px) !important;
+    padding-top: 28px !important;
+  }
+}
+
+@media (max-width: 680px) {
+  body:not(.ecosystem-page) .search-field { display: none !important; }
+  body:not(.ecosystem-page) .portfolio-create-form,
+  body:not(.ecosystem-page) .invite-form {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+  body:not(.ecosystem-page) .portfolio-create-submit {
+    grid-column: auto;
+  }
+  body:not(.ecosystem-page) .portfolio-create-submit .button,
+  body:not(.ecosystem-page) .invite-submit .button {
+    width: 100% !important;
+  }
+  body:not(.ecosystem-page) .directory-toolbar {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+  body:not(.ecosystem-page) .directory-pagination {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+  }
+}
