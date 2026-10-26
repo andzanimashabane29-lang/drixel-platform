@@ -6,6 +6,7 @@ import './styles.css'
 import './premium.css'
 import './ecosystem.css'
 import './admin-typography.css'
+import './os-shell.css'
 
 const isEcosystemHome = window.location.pathname === '/'
 if (isEcosystemHome) document.body.classList.add('ecosystem-page')
