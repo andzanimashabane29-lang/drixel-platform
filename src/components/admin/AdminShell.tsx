@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { AnimatePresence, motion } from 'framer-motion'
 import { Building2, ChevronRight, CircleUserRound, KeyRound, Layers3, LayoutDashboard, LogIn, LogOut, Menu, Search, ScrollText, Settings, ShieldCheck, Users, X, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
