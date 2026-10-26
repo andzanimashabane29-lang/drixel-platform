@@ -58,7 +58,7 @@ test('portfolio changes require an authenticated group administrator', async () 
     body: JSON.stringify({ name: 'New Business', slug: 'new-business', kind: 'business_unit' }),
   })
   assert.equal(response.status, 401)
-  assert.deepEqual(await response.json(), { error: 'Authentication required' })
+  assert.deepEqual(await response.json(), { error: 'Identity provider is not configured' })
 })
 
 test('portfolio records cannot be edited by an authenticated non-administrator', async () => {
@@ -122,7 +122,7 @@ test('group administrator can add a business and each change is audited', async 
 test('account administration requires a configured bearer identity', async () => {
   const response = await fetch(`${origin}/api/accounts`)
   assert.equal(response.status, 401)
-  assert.deepEqual(await response.json(), { error: 'Authentication required' })
+  assert.deepEqual(await response.json(), { error: 'Identity provider is not configured' })
 })
 
 test('account administration requires a bearer token when identity is configured', async () => {
@@ -148,7 +148,7 @@ test('invitation rejects a missing or invalid bearer token before reading accoun
     body: JSON.stringify({ email: 'person@example.com' }),
   })
   assert.equal(response.status, 401)
-  assert.deepEqual(await response.json(), { error: 'Authentication required' })
+  assert.deepEqual(await response.json(), { error: 'Identity provider is not configured' })
 })
 
 test('account listing returns only records authorized by the scoped database query', async () => {
