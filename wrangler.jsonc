@@ -3,6 +3,9 @@
   "name": "drixel-platform",
   "main": "./worker/index.js",
   "compatibility_date": "2026-10-26",
+  "vars": {
+    "API_ORIGIN": "https://drixel-platform-api-staging.onrender.com"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
