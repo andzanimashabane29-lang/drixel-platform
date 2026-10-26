@@ -63,3 +63,5 @@ jobs:
           git add scripts/provision-database.mjs db/init/04_bootstrap_owner.sql src/App.tsx
           git commit -m "Simplify secure first-owner bootstrap"
           git push
+
+# trigger: 1
