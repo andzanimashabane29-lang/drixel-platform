@@ -54,7 +54,6 @@ async function bootstrapOwner(client) {
   const provided = [email, name, issuer, subject].filter(Boolean).length
 
   if (provided === 0) return
-  if (managedStaging) throw new Error('Owner bootstrap is disabled in MANAGED_STAGING mode')
   if (provided !== 4) throw new Error('Set OIDC_BOOTSTRAP_ADMIN_EMAIL, OIDC_BOOTSTRAP_ADMIN_NAME, OIDC_ISSUER and OIDC_BOOTSTRAP_ADMIN_SUBJECT together')
 
   await client.query("SELECT set_config('drixel.bootstrap_email', $1, false)", [email])
