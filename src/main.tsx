@@ -4,9 +4,8 @@ import App from './App'
 import Ecosystem from './Ecosystem'
 import './styles.css'
 import './ecosystem.css'
-import './os-shell.css'
-import './final-polish.css'
 import './admin-refinement.css'
+import './native-system.css'
 
 // Auth0 redirects away from the application and then back to /auth/callback.
 // Some browser/privacy configurations can lose sessionStorage during that
