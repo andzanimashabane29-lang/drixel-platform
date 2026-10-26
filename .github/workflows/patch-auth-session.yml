@@ -1,3 +1,4 @@
+# One-shot session persistence migration
 name: Patch auth session persistence
 
 on:
