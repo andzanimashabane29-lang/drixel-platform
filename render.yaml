@@ -22,6 +22,8 @@ services:
         value: https://api.drixel-platform
       - key: OIDC_CLIENT_ID
         value: KfBDY5K8I1cqv3dG4g4DMXoRaYRUCK0n
+      - key: OIDC_ALLOWED_CLIENT_IDS
+        value: tpc_u54E49Xiadjqiui3V9FMwe
       - key: OIDC_JWKS_URI
         value: https://dev-4pc3eomoyq8oy6o4.us.auth0.com/.well-known/jwks.json
       - key: ADMIN_DATABASE_URL
