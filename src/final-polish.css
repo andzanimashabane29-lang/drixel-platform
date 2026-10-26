@@ -1,0 +1,158 @@
+/* Final Drixel OS polish. Intentionally small: this file only normalizes native feel and interaction quality. */
+
+body:not(.ecosystem-page),
+body:not(.ecosystem-page) button,
+body:not(.ecosystem-page) input,
+body:not(.ecosystem-page) select,
+body:not(.ecosystem-page) textarea {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI Variable", "Segoe UI", Helvetica, Arial, sans-serif !important;
+}
+
+body:not(.ecosystem-page) {
+  font-variant-numeric: tabular-nums;
+  font-synthesis: none;
+}
+
+body:not(.ecosystem-page) * {
+  box-sizing: border-box;
+}
+
+body:not(.ecosystem-page) a,
+body:not(.ecosystem-page) button,
+body:not(.ecosystem-page) input,
+body:not(.ecosystem-page) select,
+body:not(.ecosystem-page) textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body:not(.ecosystem-page) button,
+body:not(.ecosystem-page) a,
+body:not(.ecosystem-page) .content-panel,
+body:not(.ecosystem-page) .metric-card,
+body:not(.ecosystem-page) .search-field,
+body:not(.ecosystem-page) .nav-item {
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease, opacity .18s ease;
+}
+
+body:not(.ecosystem-page) .metric-card:hover,
+body:not(.ecosystem-page) .content-panel:hover {
+  box-shadow: 0 1px 2px rgba(0,0,0,.035), 0 14px 38px rgba(0,0,0,.065) !important;
+}
+
+body:not(.ecosystem-page) .button:active,
+body:not(.ecosystem-page) .nav-item:active,
+body:not(.ecosystem-page) .user-control:active {
+  transform: scale(.985);
+}
+
+body:not(.ecosystem-page) input,
+body:not(.ecosystem-page) select,
+body:not(.ecosystem-page) textarea {
+  color: #1d1d1f;
+  caret-color: #0071e3;
+}
+
+body:not(.ecosystem-page) input::placeholder,
+body:not(.ecosystem-page) textarea::placeholder {
+  color: #9a9aa0;
+  opacity: 1;
+}
+
+body:not(.ecosystem-page) :focus-visible {
+  outline: 2px solid rgba(0,113,227,.55) !important;
+  outline-offset: 2px !important;
+}
+
+body:not(.ecosystem-page) .page-heading h1,
+body:not(.ecosystem-page) .metric-value {
+  text-wrap: balance;
+}
+
+body:not(.ecosystem-page) .page-heading p,
+body:not(.ecosystem-page) .panel-heading p,
+body:not(.ecosystem-page) .status-banner p {
+  text-wrap: pretty;
+}
+
+body:not(.ecosystem-page) .panel-heading h2 {
+  line-height: 1.2;
+}
+
+body:not(.ecosystem-page) .settings-row,
+body:not(.ecosystem-page) .service-summary-row {
+  min-height: 58px;
+}
+
+body:not(.ecosystem-page) .data-table tbody tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+body:not(.ecosystem-page) .page-footer {
+  padding-top: 8px;
+}
+
+body:not(.ecosystem-page) ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body:not(.ecosystem-page) ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body:not(.ecosystem-page) ::-webkit-scrollbar-thumb {
+  background: rgba(60,60,67,.22);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+body:not(.ecosystem-page) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(60,60,67,.34);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body:not(.ecosystem-page) *,
+  body:not(.ecosystem-page) *::before,
+  body:not(.ecosystem-page) *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (max-width: 820px) {
+  body:not(.ecosystem-page) .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
+  body:not(.ecosystem-page) .page-content {
+    padding-bottom: 40px !important;
+  }
+}
+
+@media (max-width: 560px) {
+  body:not(.ecosystem-page) .page-heading {
+    gap: 14px !important;
+  }
+
+  body:not(.ecosystem-page) .page-heading h1 {
+    font-size: 30px !important;
+  }
+
+  body:not(.ecosystem-page) .panel-heading {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  body:not(.ecosystem-page) .data-table th,
+  body:not(.ecosystem-page) .data-table td {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}
