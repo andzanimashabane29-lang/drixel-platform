@@ -77,6 +77,9 @@ for (const pool of [directoryPool, managementPool]) pool.on('error', (error) => 
   console.error('An idle database connection ended unexpectedly.', error?.message ?? error)
 })
 
+const oidcIdTokenAudiences = [process.env.OIDC_CLIENT_ID, ...(process.env.OIDC_ALLOWED_CLIENT_IDS ?? '').split(',')]
+  .map((value) => value?.trim()).filter(Boolean)
+
 const port = Number(process.env.PORT ?? process.env.API_PORT ?? 3000)
 const server = createApiServer((text, values) => directoryPool.query(text, values), {
   managementQuery: (text, values) => managementPool.query(text, values),
@@ -101,7 +104,7 @@ const server = createApiServer((text, values) => directoryPool.query(text, value
   }),
   verifyIdToken: createOidcVerifier({
     issuer: process.env.OIDC_ISSUER,
-    audience: process.env.OIDC_CLIENT_ID,
+    audience: oidcIdTokenAudiences,
     jwksUri: process.env.OIDC_JWKS_URI,
   }),
 })

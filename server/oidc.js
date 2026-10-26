@@ -8,7 +8,8 @@ const decodePart = (value) => {
 }
 
 export function createOidcVerifier({ issuer, audience, jwksUri, fetcher = fetch, now = () => Date.now() }) {
-  if (!issuer || !audience || !jwksUri) return async () => { throw new AuthenticationError('Identity provider is not configured') }
+  const allowedAudiences = (Array.isArray(audience) ? audience : [audience]).filter(Boolean)
+  if (!issuer || !allowedAudiences.length || !jwksUri) return async () => { throw new AuthenticationError('Identity provider is not configured') }
   const secureLocation = (value, allowDockerService = false) => {
     try {
       const url = new URL(value)
@@ -54,7 +55,7 @@ export function createOidcVerifier({ issuer, audience, jwksUri, fetcher = fetch,
     const claims = decodePart(parts[1])
     const currentSeconds = Math.floor(now() / 1000)
     const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud]
-    if (claims.iss !== issuer || !audiences.includes(audience) || !Number.isFinite(claims.exp) || claims.exp <= currentSeconds
+    if (claims.iss !== issuer || !audiences.some((candidate) => allowedAudiences.includes(candidate)) || !Number.isFinite(claims.exp) || claims.exp <= currentSeconds
       || (claims.nbf !== undefined && (!Number.isFinite(claims.nbf) || claims.nbf > currentSeconds))
       || typeof claims.sub !== 'string' || claims.sub.length === 0) {
       throw new AuthenticationError('Invalid bearer token')

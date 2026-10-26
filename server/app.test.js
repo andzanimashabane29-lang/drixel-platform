@@ -351,3 +351,71 @@ test('business administrators cannot promote a member to business administrator'
     await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
   }
 })
+
+
+test('first-party Drixel SA sign-in provisions a verified Drixel account and end-user access', async () => {
+  const statements = []
+  const execute = async (sql, values = []) => {
+    statements.push({ sql, values })
+    if (sql.includes('application.slug = $1')) return { rows: [{ application_id: 'app-id', application_name: 'Drixel SA Store', organization_id: 'org-id', organization_name: 'Drixel SA' }] }
+    if (sql.includes('FROM drixel.account_identities AS identity')) return { rows: [] }
+    if (sql.includes('FROM drixel.account_emails WHERE normalized_email')) return { rows: [] }
+    if (sql.includes('INSERT INTO drixel.accounts')) return { rows: [{ id: 'account-id', display_name: 'Customer Name', status: 'active' }] }
+    if (sql.includes('SELECT status FROM drixel.organization_memberships')) return { rows: [{ status: 'active' }] }
+    if (sql.includes('INSERT INTO drixel.application_memberships')) return { rows: [{ status: 'active' }] }
+    if (sql.includes("code = 'end_user'")) return { rows: [{ id: 'end-user-role' }] }
+    return { rows: [], rowCount: 1 }
+  }
+  const protectedServer = createApiServer(async () => ({ rows: [] }), {
+    verifyToken: async () => ({ iss: 'https://id.example', sub: 'customer-subject' }),
+    verifyIdToken: async () => ({ iss: 'https://id.example', sub: 'customer-subject', email: 'Customer@Example.com', email_verified: true, name: 'Customer Name' }),
+    transaction: async (operation) => operation(execute),
+    selfServiceApplications: ['drixel-sa-store'],
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const response = await fetch(`${protectedOrigin}/api/apps/drixel-sa-store/session`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer access-token', 'content-type': 'application/json' },
+      body: JSON.stringify({ id_token: 'id-token' }),
+    })
+    const body = await response.json()
+    assert.equal(response.status, 200)
+    assert.equal(body.account.id, 'account-id')
+    assert.equal(body.account.email, 'customer@example.com')
+    assert.equal(body.application.slug, 'drixel-sa-store')
+    assert.deepEqual(body.roles, ['end_user'])
+    assert.ok(statements.some(({ sql }) => sql.includes('INSERT INTO drixel.account_identities')))
+    assert.ok(statements.some(({ sql }) => sql.includes('INSERT INTO drixel.organization_memberships')))
+    assert.ok(statements.some(({ sql }) => sql.includes('INSERT INTO drixel.role_assignments')))
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test('first-party Drixel sign-in refuses silent email-based account merging', async () => {
+  const execute = async (sql) => {
+    if (sql.includes('application.slug = $1')) return { rows: [{ application_id: 'app-id', application_name: 'Drixel SA Store', organization_id: 'org-id', organization_name: 'Drixel SA' }] }
+    if (sql.includes('FROM drixel.account_identities AS identity')) return { rows: [] }
+    if (sql.includes('FROM drixel.account_emails WHERE normalized_email')) return { rows: [{ account_id: 'different-account' }] }
+    return { rows: [] }
+  }
+  const protectedServer = createApiServer(async () => ({ rows: [] }), {
+    verifyToken: async () => ({ iss: 'https://id.example', sub: 'new-subject' }),
+    verifyIdToken: async () => ({ iss: 'https://id.example', sub: 'new-subject', email: 'existing@example.com', email_verified: true }),
+    transaction: async (operation) => operation(execute),
+  })
+  await new Promise((resolve) => protectedServer.listen(0, '127.0.0.1', resolve))
+  const protectedOrigin = `http://127.0.0.1:${protectedServer.address().port}`
+  try {
+    const response = await fetch(`${protectedOrigin}/api/apps/drixel-sa-store/session`, {
+      method: 'POST', headers: { authorization: 'Bearer access-token', 'content-type': 'application/json' }, body: JSON.stringify({ id_token: 'id-token' }),
+    })
+    assert.equal(response.status, 409)
+  } finally {
+    protectedServer.closeAllConnections()
+    await new Promise((resolve, reject) => protectedServer.close((error) => error ? reject(error) : resolve()))
+  }
+})

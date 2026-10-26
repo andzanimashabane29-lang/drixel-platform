@@ -189,6 +189,7 @@ export function createApiServer(query, options = {}) {
   const transaction = options.transaction
   const verifyToken = options.verifyToken
   const verifyIdToken = options.verifyIdToken
+  const selfServiceApplications = new Set(options.selfServiceApplications ?? ['drixel-sa-store'])
   const runTransaction = transaction ?? (async (operation) => operation(managementQuery))
 
   const authenticate = async (request) => {
@@ -341,6 +342,126 @@ export function createApiServer(query, options = {}) {
       } catch (error) {
         if (isUniqueViolation(error)) return sendJson(response, 409, { error: 'That portfolio slug is already in use' })
         return sendJson(response, 503, { error: 'Portfolio record could not be saved' })
+      }
+    }
+
+    const applicationSession = pathname.match(/^\/api\/apps\/([a-z0-9]+(?:-[a-z0-9]+)*)\/session$/)
+    if (request.method === 'POST' && applicationSession) {
+      const applicationSlug = applicationSession[1]
+      if (!selfServiceApplications.has(applicationSlug)) return sendJson(response, 404, { error: 'Application sign-in is not enabled' })
+      let claims
+      try { claims = await authenticate(request) }
+      catch (error) { return sendJson(response, 401, { error: error instanceof AuthenticationError ? error.message : 'Authentication required' }) }
+      let body
+      try { body = await readJson(request) }
+      catch (error) { return sendJson(response, 400, { error: error.message }) }
+      let identityClaims
+      try { identityClaims = verifyIdToken && typeof body?.id_token === 'string' ? await verifyIdToken(body.id_token) : undefined }
+      catch { return sendJson(response, 401, { error: 'A verified Drixel ID sign-in is required' }) }
+      if (!identityClaims || identityClaims.iss !== claims.iss || identityClaims.sub !== claims.sub) {
+        return sendJson(response, 401, { error: 'Access token and verified identity do not match' })
+      }
+      const email = normalizeEmail(identityClaims.email)
+      if (!email || identityClaims.email_verified !== true) return sendJson(response, 403, { error: 'A verified email address is required' })
+      const displayName = (typeof identityClaims.name === 'string' && identityClaims.name.trim())
+        || (typeof identityClaims.nickname === 'string' && identityClaims.nickname.trim())
+        || email.split('@')[0]
+      try {
+        const result = await runTransaction(async (tx) => {
+          const application = await tx(`
+            SELECT application.id AS application_id, application.display_name AS application_name,
+                   organization.id AS organization_id, organization.display_name AS organization_name
+            FROM drixel.applications AS application
+            JOIN drixel.organizations AS organization ON organization.id = application.owner_organization_id
+            WHERE application.slug = $1 AND application.status = 'active' AND organization.status = 'active'
+              AND organization.kind IN ('group', 'business_unit', 'subsidiary')
+          `, [applicationSlug])
+          if (!application.rows[0]) return { notFound: true }
+          const app = application.rows[0]
+
+          const identity = await tx(`
+            SELECT account.id, account.display_name, account.status
+            FROM drixel.account_identities AS identity
+            JOIN drixel.accounts AS account ON account.id = identity.account_id
+            WHERE identity.issuer = $1 AND identity.subject = $2
+            FOR UPDATE OF account
+          `, [claims.iss, claims.sub])
+
+          let account = identity.rows[0]
+          let created = false
+          if (account && account.status !== 'active') return { suspended: true }
+
+          const emailOwner = await tx(`
+            SELECT account_id FROM drixel.account_emails WHERE normalized_email = $1
+          `, [email])
+          if (emailOwner.rows[0] && (!account || emailOwner.rows[0].account_id !== account.id)) return { identityConflict: true }
+
+          if (!account) {
+            const inserted = await tx(`
+              INSERT INTO drixel.accounts (display_name) VALUES ($1)
+              RETURNING id, display_name, status
+            `, [displayName])
+            account = inserted.rows[0]
+            created = true
+            await tx(`INSERT INTO drixel.account_identities (account_id, issuer, subject) VALUES ($1, $2, $3)`,
+              [account.id, claims.iss, claims.sub])
+            await tx(`INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary) VALUES ($1, $2, true, true)`,
+              [account.id, email])
+          } else if (emailOwner.rows[0]) {
+            await tx(`UPDATE drixel.account_emails SET is_verified = true WHERE account_id = $1 AND normalized_email = $2`,
+              [account.id, email])
+          } else {
+            await tx(`INSERT INTO drixel.account_emails (account_id, email, is_verified, is_primary)
+                      VALUES ($1, $2, true, NOT EXISTS (SELECT 1 FROM drixel.account_emails WHERE account_id = $1 AND is_primary))`,
+              [account.id, email])
+          }
+
+          await tx(`
+            INSERT INTO drixel.organization_memberships (organization_id, account_id, kind, status, joined_at)
+            VALUES ($1, $2, 'customer', 'active', now())
+            ON CONFLICT (organization_id, account_id) DO UPDATE SET
+              status = CASE WHEN drixel.organization_memberships.status = 'ended' THEN drixel.organization_memberships.status ELSE 'active'::drixel.membership_status END,
+              joined_at = COALESCE(drixel.organization_memberships.joined_at, now())
+          `, [app.organization_id, account.id])
+          const membership = await tx(`
+            SELECT status FROM drixel.organization_memberships WHERE organization_id = $1 AND account_id = $2
+          `, [app.organization_id, account.id])
+          if (membership.rows[0]?.status !== 'active') return { forbidden: true }
+
+          const applicationMembership = await tx(`
+            INSERT INTO drixel.application_memberships (application_id, account_id, status)
+            VALUES ($1, $2, 'active')
+            ON CONFLICT (application_id, account_id) DO UPDATE SET
+              status = CASE WHEN drixel.application_memberships.status = 'ended' THEN drixel.application_memberships.status ELSE 'active'::drixel.membership_status END
+            RETURNING status
+          `, [app.application_id, account.id])
+          if (applicationMembership.rows[0]?.status !== 'active') return { forbidden: true }
+
+          const role = await tx(`SELECT id FROM drixel.roles WHERE scope = 'application' AND code = 'end_user'`)
+          if (!role.rows[0]) throw new Error('End-user role is not configured')
+          await tx(`
+            INSERT INTO drixel.role_assignments (account_id, role_id, scope, application_id)
+            VALUES ($1, $2, 'application', $3) ON CONFLICT DO NOTHING
+          `, [account.id, role.rows[0].id, app.application_id])
+          if (created) {
+            await tx(`
+              INSERT INTO drixel.audit_events (actor_account_id, organization_id, application_id, action, target_type, target_id, details)
+              VALUES ($1, $2, $3, 'account.self_service_joined', 'account', $1, jsonb_build_object('application_slug', $4))
+            `, [account.id, app.organization_id, app.application_id, applicationSlug])
+          }
+          return { account, app }
+        })
+        if (result.notFound) return sendJson(response, 404, { error: 'Application sign-in is unavailable' })
+        if (result.suspended) return sendJson(response, 403, { error: 'This Drixel account is suspended' })
+        if (result.forbidden) return sendJson(response, 403, { error: 'This Drixel account cannot access the application' })
+        if (result.identityConflict) return sendJson(response, 409, { error: 'This verified email already belongs to another Drixel account. Use account linking instead of creating a duplicate.' })
+        return sendJson(response, 200, {
+          account: { id: result.account.id, display_name: result.account.display_name, email },
+          application: { slug: applicationSlug, name: result.app.application_name, organization_name: result.app.organization_name },
+          roles: ['end_user'],
+        })
+      } catch {
+        return sendJson(response, 503, { error: 'Drixel application sign-in is temporarily unavailable' })
       }
     }
 

@@ -59,3 +59,10 @@ test('OIDC verifier permits the local Keycloak Docker host for JWKS only', async
   })
   await assert.rejects(insecureIssuer(makeToken({ ...validClaims, iss: 'http://keycloak:8080/realms/drixel' })), /HTTPS/)
 })
+
+
+test('OIDC verifier accepts any explicitly registered first-party client audience', async () => {
+  const verify = createOidcVerifier({ issuer: validClaims.iss, audience: ['admin-client', 'drixel-sa-client'], jwksUri: 'https://identity.example/jwks', fetcher, now })
+  const claims = await verify(makeToken({ ...validClaims, aud: 'drixel-sa-client' }))
+  assert.equal(claims.aud, 'drixel-sa-client')
+})
