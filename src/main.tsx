@@ -37,11 +37,51 @@ Storage.prototype.removeItem = function removeItem(key: string) {
   }
 }
 
+function callbackDiagnostic() {
+  if (window.location.pathname !== '/auth/callback') return null
+  const params = new URLSearchParams(window.location.search)
+  const error = params.get('error')
+  const description = params.get('error_description')
+  if (error) return `Auth0 returned ${error}${description ? `: ${description}` : ''}`
+
+  const code = params.get('code')
+  const returnedState = params.get('state')
+  const transactionText = sessionStorage.getItem(oidcTransactionKey)
+  if (!code) return 'Auth0 returned to Drixel without an authorization code.'
+  if (!returnedState) return 'Auth0 returned to Drixel without the OAuth state value.'
+  if (!transactionText) return 'Drixel could not recover the saved PKCE login transaction after returning from Auth0.'
+
+  try {
+    const transaction = JSON.parse(transactionText) as { state?: string }
+    if (!transaction.state) return 'The saved Drixel login transaction is invalid.'
+    if (transaction.state !== returnedState) return 'The OAuth state returned by Auth0 does not match the login transaction created by Drixel.'
+  } catch {
+    return 'The saved Drixel login transaction could not be read.'
+  }
+  return null
+}
+
+function AuthCallbackFailure({ message }: { message: string }) {
+  return (
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', background: '#f5f5f7', color: '#111' }}>
+      <section style={{ width: 'min(620px, 100%)', background: '#fff', border: '1px solid #ddd', borderRadius: 18, padding: 32 }}>
+        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#666' }}>Drixel ID</p>
+        <h1 style={{ margin: '0 0 16px', fontSize: 28, letterSpacing: '-.03em' }}>Sign-in callback failed</h1>
+        <p style={{ margin: '0 0 22px', lineHeight: 1.6, color: '#444' }}>{message}</p>
+        <a href="/accounts" style={{ display: 'inline-block', padding: '11px 16px', borderRadius: 10, background: '#111', color: '#fff', textDecoration: 'none', fontWeight: 650 }}>Start a fresh sign-in</a>
+      </section>
+    </main>
+  )
+}
+
+const callbackFailure = callbackDiagnostic()
 const isEcosystemHome = window.location.pathname === '/'
 if (isEcosystemHome) document.body.classList.add('ecosystem-page')
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {isEcosystemHome ? <Ecosystem /> : <App />}
+    {callbackFailure
+      ? <AuthCallbackFailure message={callbackFailure} />
+      : isEcosystemHome ? <Ecosystem /> : <App />}
   </React.StrictMode>,
 )
