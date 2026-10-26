@@ -18,10 +18,16 @@ services:
         fromDatabase:
           name: drixel-platform-db-staging
           property: connectionString
-      - key: POSTGRES_DIRECTORY_PASSWORD
-        generateValue: true
-      - key: POSTGRES_MANAGEMENT_PASSWORD
-        generateValue: true
+      - key: DIRECTORY_DATABASE_URL
+        fromDatabase:
+          name: drixel-platform-db-staging
+          property: connectionString
+      - key: MANAGEMENT_DATABASE_URL
+        fromDatabase:
+          name: drixel-platform-db-staging
+          property: connectionString
+      - key: SKIP_ROLE_LOGIN_SETUP
+        value: "true"
       - key: PGSSL
         value: require
       - key: PGSSL_REJECT_UNAUTHORIZED
