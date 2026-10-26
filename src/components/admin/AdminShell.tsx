@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Building2, ChevronRight, CircleUserRound, KeyRound, Layers3, LayoutDashboard, LogIn, LogOut, Menu, Moon, Search, ScrollText, Settings, ShieldCheck, Sun, Users, X, type LucideIcon } from 'lucide-react'
+import { Building2, ChevronRight, CircleUserRound, KeyRound, Layers3, LayoutDashboard, LogIn, LogOut, Menu, Moon, Search, ScrollText, Settings, Sun, Users, X, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 export type AdminNavItem = { label: string; href: string; active?: boolean; onClick: () => void }
@@ -32,10 +32,10 @@ function SidebarContent({ items, oidcConfigured, onSettings }: { items: AdminNav
         return <a key={item.label} href={item.href} onClick={(event) => { event.preventDefault(); item.onClick() }} aria-current={item.active ? 'page' : undefined} className={cn('flex h-10 items-center gap-3 rounded-[var(--radius-control)] px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground', item.active && 'bg-[var(--sidebar-active)] text-accent')}><Icon size={17} strokeWidth={1.8} aria-hidden="true" /><span>{item.label}</span></a>
       })}
     </nav>
-    <div className="border-t border-border p-3">
-      <button type="button" onClick={onSettings} className="flex w-full items-center gap-3 rounded-[var(--radius-control)] px-3 py-2.5 text-left hover:bg-surface-hover">
-        <span className={cn('grid h-8 w-8 place-items-center rounded-full', oidcConfigured ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning')}><ShieldCheck size={15} /></span>
-        <span className="min-w-0"><strong className="block truncate text-[12px] font-medium text-foreground">{oidcConfigured ? 'Identity connected' : 'Identity setup needed'}</strong><small className="block truncate text-[11px] text-tertiary-foreground">Drixel ID</small></span>
+    <div className="border-t border-border px-4 py-3">
+      <button type="button" onClick={onSettings} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-control)] px-2 py-2 text-left hover:bg-surface-hover">
+        <span className="min-w-0"><strong className="block truncate text-[12px] font-medium text-foreground">Drixel ID</strong><small className="block truncate text-[11px] text-tertiary-foreground">Identity provider</small></span>
+        <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground"><span className={cn('h-1.5 w-1.5 rounded-full', oidcConfigured ? 'bg-success' : 'bg-warning')} aria-hidden="true" />{oidcConfigured ? 'Connected' : 'Setup'}</span>
       </button>
     </div>
   </div>
@@ -58,11 +58,44 @@ export function AdminShell({ items, breadcrumbs, search, authenticated, oidcConf
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setCommandOpen(true) }
+      const target = event.target as HTMLElement | null
+      const editing = Boolean(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable))
+      const key = event.key.toLowerCase()
+
+      if ((event.metaKey || event.ctrlKey) && key === 'k') {
+        event.preventDefault()
+        setCommandOpen(true)
+        return
+      }
+
+      if (event.key === 'Escape') {
+        setCommandOpen(false)
+        setMobileOpen(false)
+        return
+      }
+
+      if (editing) return
+
+      if (event.altKey && /^[1-7]$/.test(event.key)) {
+        const index = Number(event.key) - 1
+        const item = items[index]
+        if (item) {
+          event.preventDefault()
+          item.onClick()
+        }
+        return
+      }
+
+      if (event.key === '/' && search) {
+        event.preventDefault()
+        const input = document.querySelector<HTMLInputElement>('[data-page-search]')
+        input?.focus()
+        input?.select()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [items, search])
 
   useEffect(() => { if (!commandOpen) setCommandQuery('') }, [commandOpen])
 
@@ -78,7 +111,7 @@ export function AdminShell({ items, breadcrumbs, search, authenticated, oidcConf
         <button type="button" onClick={() => setMobileOpen(true)} className="grid h-9 w-9 place-items-center rounded-[var(--radius-control)] hover:bg-surface-hover md:hidden" aria-label="Open navigation"><Menu size={18} /></button>
         <nav className="flex min-w-0 flex-1 items-center gap-1.5" aria-label="Breadcrumbs">{breadcrumbs.map((crumb, index) => <span key={`${crumb.label}-${index}`} className="flex min-w-0 items-center gap-1.5">{index > 0 && <ChevronRight size={13} className="shrink-0 text-tertiary-foreground" />}{crumb.onClick ? <button type="button" onClick={crumb.onClick} className="truncate text-[12px] text-muted-foreground hover:text-foreground">{crumb.label}</button> : <span className="truncate text-[12px] font-medium text-foreground">{crumb.label}</span>}</span>)}</nav>
         <button type="button" onClick={() => setCommandOpen(true)} className={cn('hidden h-9 items-center gap-2 rounded-[var(--radius-control)] border border-border bg-surface/80 px-3 text-left text-[12px] text-muted-foreground hover:bg-surface md:flex', search ? 'min-w-0' : 'min-w-56')} aria-label="Open command palette"><Search size={14} /><span className={cn('flex-1', search && 'hidden xl:inline')}>{search ? 'Jump' : 'Search or jump to…'}</span><kbd className={cn('rounded border border-border bg-surface-subtle px-1.5 py-0.5 text-[10px] text-tertiary-foreground', search && 'hidden 2xl:inline')}>Ctrl K</kbd></button>
-        {search && <label className="hidden h-9 w-60 items-center gap-2 rounded-[var(--radius-control)] border border-border bg-surface px-3 lg:flex"><Search size={14} className="text-tertiary-foreground" /><span className="sr-only">Search</span><input value={search.value} onChange={(event) => search.onChange(event.target.value)} placeholder={search.placeholder} className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-tertiary-foreground" /></label>}
+        {search && <label className="hidden h-9 w-60 items-center gap-2 rounded-[var(--radius-control)] border border-border bg-surface px-3 lg:flex"><Search size={14} className="text-tertiary-foreground" /><span className="sr-only">Search</span><input data-page-search value={search.value} onChange={(event) => search.onChange(event.target.value)} placeholder={search.placeholder} className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-tertiary-foreground" /></label>}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild><button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-foreground text-[11px] font-semibold text-background ring-offset-2 hover:opacity-90" aria-label="Account menu">{authenticated ? 'ID' : 'DL'}</button></DropdownMenu.Trigger>
           <DropdownMenu.Portal><DropdownMenu.Content sideOffset={10} align="end" className="z-50 min-w-56 rounded-[var(--radius-card)] border border-border bg-surface p-1.5 shadow-[var(--floating-shadow)]"><div className="px-2.5 py-2"><p className="text-[12px] font-medium text-foreground">{authenticated ? 'Drixel ID' : 'Drixel Labs'}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{authenticated ? 'Secure session active' : 'Not signed in'}</p></div><DropdownMenu.Separator className="my-1 h-px bg-border" /><DropdownMenu.Item onSelect={onSettings} className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12px] text-foreground outline-none hover:bg-surface-hover focus:bg-surface-hover"><Settings size={15} />Settings</DropdownMenu.Item><DropdownMenu.Item onSelect={(event) => { event.preventDefault(); setDarkMode((value) => !value) }} className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12px] text-foreground outline-none hover:bg-surface-hover focus:bg-surface-hover">{darkMode ? <Sun size={15} /> : <Moon size={15} />}{darkMode ? 'Use light appearance' : 'Use dark appearance'}</DropdownMenu.Item><DropdownMenu.Item onSelect={authenticated ? onSignOut : onSignIn} className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12px] text-foreground outline-none hover:bg-surface-hover focus:bg-surface-hover">{authenticated ? <LogOut size={15} /> : <LogIn size={15} />}{authenticated ? 'Sign out' : 'Sign in'}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal>
@@ -87,6 +120,6 @@ export function AdminShell({ items, breadcrumbs, search, authenticated, oidcConf
       <main className="mx-auto w-full max-w-[1440px] px-4 py-8 md:px-10 md:py-10">{children}</main>
     </div>
 
-    <Dialog.Root open={commandOpen} onOpenChange={setCommandOpen}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[3px]" /><Dialog.Content className="fixed left-1/2 top-[18%] z-[61] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-[16px] border border-border bg-surface shadow-[var(--floating-shadow)]"><Dialog.Title className="sr-only">Command palette</Dialog.Title><div className="flex h-12 items-center gap-2 border-b border-border px-4"><Search size={16} className="text-tertiary-foreground" /><input autoFocus value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Jump to a section…" className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-tertiary-foreground" /></div><div className="max-h-80 overflow-y-auto p-2">{commandItems.map(item => { const Icon = iconFor[item.label] ?? CircleUserRound; return <button key={item.label} type="button" onClick={() => { item.onClick(); setCommandOpen(false) }} className="flex h-11 w-full items-center gap-3 rounded-[var(--radius-control)] px-3 text-left text-[13px] text-foreground hover:bg-surface-hover"><Icon size={16} className="text-muted-foreground" />{item.label}</button> })}{commandItems.length === 0 && <div className="px-3 py-8 text-center text-[12px] text-muted-foreground">No matching section</div>}</div></Dialog.Content></Dialog.Portal></Dialog.Root>
+    <Dialog.Root open={commandOpen} onOpenChange={setCommandOpen}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[3px]" /><Dialog.Content className="fixed left-1/2 top-[18%] z-[61] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-[16px] border border-border bg-surface shadow-[var(--floating-shadow)]"><Dialog.Title className="sr-only">Command palette</Dialog.Title><div className="flex h-12 items-center gap-2 border-b border-border px-4"><Search size={16} className="text-tertiary-foreground" /><input autoFocus value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Jump to a section…" className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-tertiary-foreground" /></div><div className="max-h-80 overflow-y-auto p-2">{commandItems.map((item) => { const Icon = iconFor[item.label] ?? CircleUserRound; const shortcutIndex = items.findIndex((entry) => entry.label === item.label); return <button key={item.label} type="button" onClick={() => { item.onClick(); setCommandOpen(false) }} className="flex h-11 w-full items-center gap-3 rounded-[var(--radius-control)] px-3 text-left text-[13px] text-foreground hover:bg-surface-hover"><Icon size={16} className="text-muted-foreground" /><span className="flex-1">{item.label}</span>{shortcutIndex >= 0 && <kbd className="text-[10px] text-tertiary-foreground">Alt {shortcutIndex + 1}</kbd>}</button> })}{commandItems.length === 0 && <div className="px-3 py-8 text-center text-[12px] text-muted-foreground">No matching section</div>}</div><div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-2.5 text-[10px] text-tertiary-foreground"><span><kbd>Ctrl K</kbd> commands</span><span><kbd>Alt 1–7</kbd> navigate</span>{search && <span><kbd>/</kbd> search</span>}<span><kbd>Esc</kbd> close</span></div></Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>
 }

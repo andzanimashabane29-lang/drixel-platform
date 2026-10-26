@@ -306,8 +306,9 @@ function Overview({ onNavigate, onOpenBusiness, onOpenService, onRetry, filtered
       <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface">
         <div className="flex flex-col gap-6 px-6 py-7 md:flex-row md:items-end md:justify-between md:px-8 md:py-8">
           <div className="max-w-2xl">
-            <div className="mb-4 flex items-center gap-2">
-              <StatusPill status={error ? 'error' : loading ? 'muted' : allHealthy ? 'healthy' : 'warning'} label={error ? 'Directory unavailable' : loading ? 'Checking directory' : allHealthy ? 'All systems healthy' : 'Review required'} />
+            <div className="mb-4 flex items-center gap-2 text-[12px] text-muted-foreground">
+              <span className={`h-1.5 w-1.5 rounded-full ${error ? 'bg-danger' : loading ? 'bg-tertiary-foreground' : allHealthy ? 'bg-success' : 'bg-warning'}`} aria-hidden="true" />
+              <span>{error ? 'Directory unavailable' : loading ? 'Checking directory' : allHealthy ? 'Directory healthy' : 'Directory needs review'}</span>
             </div>
             <h2 className="text-[28px] font-semibold tracking-[-.02em] text-foreground md:text-[32px]">{loading ? 'Reading your group directory' : error ? 'The group directory needs attention' : businessCount + ' businesses, ' + serviceCount + ' services'}</h2>
             <p className="mt-3 max-w-xl text-[14px] leading-6 text-muted-foreground">{loading ? 'Current business and service records are being loaded.' : error ? 'Drixel could not read the current directory. Retry the connection or review directory settings.' : 'Your operating portfolio is connected and available from one administration workspace.'}</p>
