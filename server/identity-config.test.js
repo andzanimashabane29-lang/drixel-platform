@@ -28,3 +28,21 @@ test('Existing account integrations remain declared for staged migration',()=>{
  for(const id of ['drixel-platform-console','drixel-sa-firebase','a-chatz-supabase'])
   assert.ok(realm.clients.some(client=>client.clientId===id),id+' must not disappear from realm during migration')
 })
+
+test('Staging identity service is isolated, persistent and not public on HTTP',()=>{
+ const yml=readFileSync(new URL('../identity/compose.staging.yml',import.meta.url),'utf8')
+ assert.match(yml,/command: \["start","--optimized"/)
+ assert.doesNotMatch(yml,/start-dev/)
+ assert.match(yml,/drixel_identity_pg_staging:\/var\/lib\/postgresql\/data/)
+ assert.match(yml,/KC_HOSTNAME_STRICT: "true"/)
+ assert.match(yml,/expose: \["8080"\]/)
+ assert.doesNotMatch(yml,/ports:\s*\n\s*-.*8080/)
+ assert.match(yml,/DRIXEL_ID_DB_PASSWORD:\?/)
+})
+test('DRIXEL identity theme provides contrast and visible focus affordances',()=>{
+ const css=readFileSync(new URL('../identity/keycloak/themes/drixel/login/resources/css/drixel.css',import.meta.url),'utf8')
+ const cfg=readFileSync(new URL('../identity/keycloak/themes/drixel/login/theme.properties',import.meta.url),'utf8')
+ assert.match(css,/DRIXEL ID/)
+ assert.match(css,/:focus-visible/)
+ assert.match(cfg,/parent=keycloak/)
+})
