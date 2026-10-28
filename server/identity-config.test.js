@@ -46,3 +46,16 @@ test('DRIXEL identity theme provides contrast and visible focus affordances',()=
  assert.match(css,/:focus-visible/)
  assert.match(cfg,/parent=keycloak/)
 })
+
+test('Staging realm is imported with DRIXEL branding and an isolated store client',()=>{
+ const yml=readFileSync(new URL('../identity/compose.staging.yml',import.meta.url),'utf8')
+ assert.match(yml,/--import-realm/)
+ assert.match(yml,/keycloak\/drixel-realm.json:\/opt\/keycloak\/data\/import\/drixel-realm.json:ro/)
+ assert.equal(realm.loginTheme,'drixel')
+ const client=realm.clients.find(row=>row.clientId==='drixel-sa-store-staging')
+ assert.ok(client)
+ assert.equal(client.publicClient,true)
+ assert.deepEqual(client.redirectUris,['https://staging.drixelsa.co.za/za/member/drixel-callback'])
+ assert.deepEqual(client.webOrigins,['https://staging.drixelsa.co.za'])
+ assert.equal(client.attributes['pkce.code.challenge.method'],'S256')
+})
