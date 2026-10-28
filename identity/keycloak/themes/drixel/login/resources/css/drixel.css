@@ -1,0 +1,14 @@
+/* DRIXEL ID | restrained monochrome, accessible Keycloak login */
+:root { color-scheme:light; font-family:Inter,Arial,sans-serif; }
+body.login-pf { background:#f5f4f0!important; color:#111; min-height:100vh; }
+body.login-pf::before { content:"DRIXEL ID"; position:fixed;top:28px;left:clamp(22px,5vw,78px);font-size:24px;font-weight:850;letter-spacing:-.07em;color:#111;z-index:2; }
+.login-pf-page { padding:9vh 18px 5vh; }
+#kc-header,#kc-header-wrapper { display:none!important; }
+.card-pf { width:min(440px,100%); margin:auto; padding:clamp(28px,5vw,46px)!important; border:1px solid #e2e0db!important; border-radius:4px!important; box-shadow:0 25px 75px rgba(0,0,0,.07)!important; background:#fff!important; }
+#kc-page-title {font-size:clamp(28px,4vw,38px);font-weight:750;letter-spacing:-.055em;line-height:1.12;color:#121212; }
+#kc-form input {border:1px solid #a6a6a0;border-radius:3px;padding:12px 14px;min-height:44px;}
+#kc-form input:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid #5a6472;outline-offset:3px;}
+#kc-login,.btn-primary {background:#111!important;border-color:#111!important;border-radius:3px!important;min-height:46px;font-weight:650;}
+#kc-social-providers a {border:1px solid #aaa;border-radius:3px;background:#fff;color:#111;min-height:44px;}
+a{color:#111;text-decoration:underline;text-underline-offset:3px;}
+@media(max-width:600px){.login-pf-page{padding-top:92px}.card-pf{box-shadow:none!important}}
