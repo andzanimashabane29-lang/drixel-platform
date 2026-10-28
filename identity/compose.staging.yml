@@ -1,0 +1,46 @@
+# Separate staging-only identity stack. Never re-use the application database volume.
+# Put a TLS-terminating reverse proxy in front; Keycloak must NOT be publicly exposed on 8080.
+services:
+  id_database:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${DRIXEL_ID_DB_PASSWORD:?Set a strong staging database password}
+    volumes:
+      - drixel_identity_pg_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [identity_backend]
+  identity:
+    build:
+      context: ..
+      dockerfile: identity/keycloak/Dockerfile
+    restart: unless-stopped
+    command: ["start","--optimized","--http-enabled=true","--proxy-headers=xforwarded"]
+    depends_on:
+      id_database:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: id_database
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${DRIXEL_ID_DB_PASSWORD:?Set a strong staging database password}
+      KC_HOSTNAME: ${DRIXEL_ID_STAGING_HOSTNAME:?Set HTTPS hostname before deployment}
+      KC_HOSTNAME_STRICT: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${DRIXEL_ID_ADMIN_USERNAME:?Set a non-default admin username}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${DRIXEL_ID_ADMIN_PASSWORD:?Set a strong admin password}
+      KC_HEALTH_ENABLED: "true"
+    expose: ["8080"]
+    networks: [identity_backend]
+  # Provision a separate managed TLS gateway; don't publish Keycloak's backend port.
+networks:
+  identity_backend:
+    driver: bridge
+volumes:
+  drixel_identity_pg_staging:
