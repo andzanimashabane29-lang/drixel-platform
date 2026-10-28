@@ -74,6 +74,27 @@
         "https://drixel-sa.firebaseapp.com/__/auth/handler"
       ],
       "webOrigins": []
+    },
+    {
+      "clientId": "drixel-sa-store-staging",
+      "name": "DRIXEL SA Store — staging sign-in",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://staging.drixelsa.co.za/za/member/drixel-callback"
+      ],
+      "webOrigins": [
+        "https://staging.drixelsa.co.za"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
     }
-  ]
+  ],
+  "loginTheme": "drixel"
 }
